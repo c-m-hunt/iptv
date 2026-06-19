@@ -3,6 +3,15 @@
 import { SearchController } from './search.js';
 import { applyRect } from './layout.js';
 
+// Stuck-stream watchdog tuning.
+const WATCHDOG_MS = 2000; // how often to check that playback is progressing
+const STUCK_MS = 8000; // playing stream frozen this long => restart
+const INITIAL_LOAD_TIMEOUT = 20000; // never-started stream: failsafe before reload
+const RELOAD_COOLDOWN = 8000; // min gap between watchdog restarts
+const MAX_STUCK_RELOADS = 6; // give up after this many fruitless restarts
+const MAX_ERROR_RETRIES = 5; // consecutive hard errors before giving up
+const ERROR_RETRY_DELAY = 2000;
+
 export class Player {
   constructor(num, { onSelect, onFocus }) {
     this.num = num;
@@ -37,6 +46,16 @@ export class Player {
     // Clicking a player focuses it (gives it audio).
     this.el.addEventListener('mousedown', () => onFocus?.(this));
 
+    // Stuck-stream watchdog state.
+    this._lastTime = 0;
+    this._lastProgressAt = 0;
+    this._loadStartedAt = 0;
+    this._started = false; // has this stream ever produced a frame?
+    this._errorCount = 0;
+    this._stuckReloads = 0;
+    this._reloadAt = 0;
+    this._watchdog = setInterval(() => this._tick(), WATCHDOG_MS);
+
     this._updateBadge();
   }
 
@@ -67,6 +86,8 @@ export class Player {
 
   setChannel(channel) {
     this.channel = channel;
+    this._errorCount = 0;
+    this._stuckReloads = 0;
     this.closeSearch();
     this._updateBadge();
     this._loadStream(channel.id);
@@ -81,6 +102,10 @@ export class Player {
     this.el.classList.add('is-loading');
     this.el.classList.remove('is-error');
     this.statusEl.textContent = 'Loading…';
+    this._lastTime = 0;
+    this._lastProgressAt = Date.now();
+    this._loadStartedAt = Date.now();
+    this._started = false;
 
     if (!window.mpegts || !window.mpegts.isSupported()) {
       this._fail('MPEG-TS playback not supported in this browser.');
@@ -104,13 +129,15 @@ export class Player {
     );
     mp.attachMediaElement(this.video);
     mp.on(window.mpegts.Events.ERROR, (type, detail) => {
-      this._fail(`Stream error (${type}${detail ? ': ' + detail : ''}).`);
+      this._onError(`${type}${detail ? ': ' + detail : ''}`);
     });
     this.video.addEventListener(
       'playing',
       () => {
         this.el.classList.remove('is-loading', 'is-error');
         this.statusEl.textContent = '';
+        this._lastProgressAt = Date.now();
+        this._started = true;
       },
       { once: true }
     );
@@ -133,6 +160,82 @@ export class Player {
     this.statusEl.textContent = message + ' — press ' + this.num + ' to pick another channel.';
   }
 
+  // Watchdog: a live stream that freezes often emits no error — currentTime
+  // just stops advancing. Detect that and restart the stream.
+  _tick() {
+    if (!this.channel || !this.mp) return;
+    const v = this.video;
+    const now = Date.now();
+
+    if (v.currentTime > this._lastTime + 0.1) {
+      // Healthy: playback is progressing.
+      this._lastTime = v.currentTime;
+      this._lastProgressAt = now;
+      this._started = true;
+      this._errorCount = 0;
+      this._stuckReloads = 0;
+      if (this.el.classList.contains('is-loading')) {
+        this.el.classList.remove('is-loading');
+        this.statusEl.textContent = '';
+      }
+      return;
+    }
+
+    if (v.paused) return;
+
+    // Before the first frame the stream is still connecting/buffering — be
+    // patient (the stash buffer can take several seconds). Only restart if it
+    // never starts at all after a generous failsafe; otherwise let mpegts'
+    // own error handling deal with load failures.
+    if (!this._started) {
+      const loadingFor = now - this._loadStartedAt;
+      if (loadingFor > INITIAL_LOAD_TIMEOUT && now - this._reloadAt > RELOAD_COOLDOWN) {
+        if (this._stuckReloads >= MAX_STUCK_RELOADS) {
+          this._fail('Stream unavailable');
+          return;
+        }
+        this._stuckReloads++;
+        this._reload('never started');
+      }
+      return;
+    }
+
+    // Was playing, now frozen.
+    const stalled = now - this._lastProgressAt;
+    if (stalled > STUCK_MS && now - this._reloadAt > RELOAD_COOLDOWN) {
+      if (this._stuckReloads >= MAX_STUCK_RELOADS) {
+        this._fail('Stream unavailable');
+        return;
+      }
+      this._stuckReloads++;
+      this._reload(`stuck ${Math.round(stalled / 1000)}s`);
+    } else if (stalled > STUCK_MS * 0.5) {
+      this.el.classList.add('is-loading');
+      this.statusEl.textContent = 'Reconnecting…';
+    }
+  }
+
+  _reload(reason) {
+    if (!this.channel) return;
+    this._reloadAt = Date.now();
+    console.warn(`[player ${this.num}] auto-restart (${reason})`);
+    this._loadStream(this.channel.id);
+  }
+
+  _onError(msg) {
+    this._errorCount++;
+    if (this._errorCount > MAX_ERROR_RETRIES) {
+      this._fail(`Stream error: ${msg}`);
+      return;
+    }
+    console.warn(`[player ${this.num}] stream error ${this._errorCount}/${MAX_ERROR_RETRIES}: ${msg}`);
+    this.el.classList.remove('is-error');
+    this.el.classList.add('is-loading');
+    this.statusEl.textContent = 'Reconnecting…';
+    clearTimeout(this._retryTimer);
+    this._retryTimer = setTimeout(() => this._reload(`error: ${msg}`), ERROR_RETRY_DELAY);
+  }
+
   _destroyMp() {
     if (this.mp) {
       try {
@@ -144,17 +247,23 @@ export class Player {
     }
   }
 
-  setFocused(focused, multi) {
+  // allowAudio is false until the user has interacted with the page — browsers
+  // block (and pause) unmuted autoplay without a gesture, so we keep everything
+  // muted on load and unmute the focused player on the first click/keypress.
+  setFocused(focused, multi, allowAudio = true) {
     this.el.classList.toggle('focused', focused);
     this.el.classList.toggle('multi', multi);
-    // Single player is always audible; with two, only the focused one is.
-    this.muted = multi ? !focused : false;
+    // Single player is audible; with two, only the focused one — but never
+    // before a user gesture.
+    this.muted = allowAudio ? (multi ? !focused : false) : true;
     this._applyMute();
   }
 
   _applyMute() {
     this.video.muted = this.muted;
-    if (!this.muted) {
+    // Ensure the element is actually playing (muted autoplay is always allowed;
+    // a previous unmute attempt may have left it paused).
+    if (this.video.paused) {
       const p = this.video.play?.();
       if (p && p.catch) p.catch(() => {});
     }
@@ -165,6 +274,8 @@ export class Player {
   }
 
   destroy() {
+    clearInterval(this._watchdog);
+    clearTimeout(this._retryTimer);
     this._destroyMp();
     this.el.remove();
   }
