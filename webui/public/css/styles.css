@@ -185,6 +185,13 @@ body {
   position: absolute;
   z-index: 30;
   background: transparent;
+  transition: opacity 0.3s ease;
+}
+
+/* Hidden along with the toolbar after the mouse goes idle. */
+#handle.faded {
+  opacity: 0;
+  pointer-events: none;
 }
 
 #handle.vertical {

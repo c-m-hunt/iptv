@@ -172,13 +172,20 @@ class App {
     document.getElementById('btn-layout').addEventListener('click', () => this.cycleLayout());
     document.getElementById('btn-live').addEventListener('click', () => this.toggleLive());
 
-    // Auto-hide the toolbar when the mouse is idle (unless pinned with C).
+    // Reveal the control bar AND the drag handle on mouse movement, then hide
+    // both after the same idle period (unless pinned with C).
     this._pinned = false;
     let idle;
     this._wakeToolbar = () => {
       this.toolbar.classList.remove('faded');
+      this.handleEl.classList.remove('faded');
       clearTimeout(idle);
-      if (!this._pinned) idle = setTimeout(() => this.toolbar.classList.add('faded'), 4000);
+      if (!this._pinned) {
+        idle = setTimeout(() => {
+          this.toolbar.classList.add('faded');
+          this.handleEl.classList.add('faded');
+        }, 4000);
+      }
     };
     document.addEventListener('mousemove', this._wakeToolbar);
     this._wakeToolbar();
