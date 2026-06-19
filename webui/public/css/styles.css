@@ -402,6 +402,43 @@ body {
   50% { opacity: 0.4; }
 }
 
+/* live score line(s) inside a live group's panel */
+.glives {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  margin-bottom: 0.3em;
+}
+
+.glive {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.22em 0.5em;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.18);
+  font-size: clamp(13px, 5.8cqh, 28px);
+  white-space: nowrap;
+}
+
+.glive .gl-ab {
+  font-weight: 700;
+}
+
+.glive .gl-sc {
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  padding: 0 0.15em;
+}
+
+.glive .gl-ck {
+  margin-left: auto;
+  color: #34d399;
+  font-weight: 800;
+  font-size: 0.82em;
+}
+
 .gtable {
   width: 100%;
   border-collapse: collapse;

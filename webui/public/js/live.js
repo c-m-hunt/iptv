@@ -154,7 +154,13 @@ export class LivePanels {
       return;
     }
     if (this.groupIdx >= list.length) this.groupIdx = 0;
-    this.standingsEl.innerHTML = bodyOnly(renderGroup(list[this.groupIdx], this.groupIdx, list.length));
+    const g = list[this.groupIdx];
+    const liveMatches = (this.data.matches || []).filter(
+      (m) => m.state === 'in' && m.group === g.name
+    );
+    this.standingsEl.innerHTML = bodyOnly(
+      renderGroup(g, this.groupIdx, list.length, liveMatches)
+    );
   }
 
   _renderError(msg) {
@@ -206,8 +212,11 @@ function timeLabel(iso) {
 }
 
 // -- group standings ----------------------------------------------------
-function renderGroup(g, idx, total) {
+function renderGroup(g, idx, total, liveMatches = []) {
   const liveBadge = g.live ? '<span class="live-badge">● LIVE</span>' : '';
+  const liveScores = liveMatches.length
+    ? '<div class="glives">' + liveMatches.map(liveLine).join('') + '</div>'
+    : '';
   const rows = (g.teams || [])
     .map((t, i) => {
       const cls = (i < 2 ? 'adv' : 'out') + (t.live ? ' tlive' : '');
@@ -224,9 +233,22 @@ function renderGroup(g, idx, total) {
   return (
     `<div class="gpanel">` +
     `<div class="gtitle">${esc(g.name)}${liveBadge}<span class="gcount">${idx + 1}/${total}</span></div>` +
+    liveScores +
     `<table class="gtable"><thead><tr>` +
     `<th></th><th></th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th>` +
     `</tr></thead><tbody>${rows}</tbody></table>` +
+    `</div>`
+  );
+}
+
+// Current live score line shown inside a live group's panel.
+function liveLine(m) {
+  return (
+    `<div class="glive">` +
+    `${flag(m.home.logo)}<span class="gl-ab">${esc(m.home.abbr || m.home.name)}</span>` +
+    `<span class="gl-sc">${esc(m.home.score ?? '')}–${esc(m.away.score ?? '')}</span>` +
+    `<span class="gl-ab">${esc(m.away.abbr || m.away.name)}</span>${flag(m.away.logo)}` +
+    `<span class="gl-ck">${esc(m.clock || 'LIVE')}</span>` +
     `</div>`
   );
 }
