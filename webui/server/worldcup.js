@@ -86,42 +86,48 @@ function teamLogo(team) {
   return team?.logos?.[0]?.href || team?.logo || '';
 }
 
+function fmtGd(n) {
+  return n > 0 ? '+' + n : String(n);
+}
+
+// Sort a group's teams (points, GD, GF, name) and refresh display strings + rank
+// from the numeric fields. Used for both the official table and the live one.
+function finalizeGroup(g) {
+  g.teams.sort(
+    (a, b) => b._pts - a._pts || b._gd - a._gd || b._gf - a._gf || a.name.localeCompare(b.name)
+  );
+  g.teams.forEach((t, i) => {
+    t.rank = i + 1;
+    t.p = String(t._p);
+    t.w = String(t._w);
+    t.d = String(t._d);
+    t.l = String(t._l);
+    t.gd = fmtGd(t._gd);
+    t.pts = String(t._pts);
+  });
+}
+
 function parseStandings(json) {
   // ESPN nests groups under children[]; each child has standings.entries[].
   const groups = [];
   const children = json?.children || [];
   for (const child of children) {
     const entries = child?.standings?.entries || [];
-    const teams = entries.map((e) => {
-      const pts = statOf(e, ['points']);
-      const gd = statOf(e, ['pointDifferential', 'goalDifference']);
-      const gf = statOf(e, ['pointsFor', 'goalsFor']);
-      return {
-        name: e?.team?.shortDisplayName || e?.team?.displayName || e?.team?.name || '?',
-        abbr: e?.team?.abbreviation || '',
-        logo: teamLogo(e?.team),
-        p: statOf(e, ['gamesPlayed']).disp,
-        w: statOf(e, ['wins']).disp,
-        d: statOf(e, ['ties']).disp,
-        l: statOf(e, ['losses']).disp,
-        gd: gd.disp,
-        pts: pts.disp,
-        _pts: pts.num,
-        _gd: gd.num,
-        _gf: gf.num,
-      };
-    });
-    // Sort by points, then goal difference, then goals for, then name.
-    teams.sort(
-      (a, b) => b._pts - a._pts || b._gd - a._gd || b._gf - a._gf || a.name.localeCompare(b.name)
-    );
-    teams.forEach((t, i) => {
-      t.rank = i + 1;
-      delete t._pts;
-      delete t._gd;
-      delete t._gf;
-    });
-    groups.push({ name: child?.name || child?.abbreviation || 'Group', teams });
+    const teams = entries.map((e) => ({
+      name: e?.team?.shortDisplayName || e?.team?.displayName || e?.team?.name || '?',
+      abbr: e?.team?.abbreviation || '',
+      logo: teamLogo(e?.team),
+      _p: statOf(e, ['gamesPlayed']).num,
+      _w: statOf(e, ['wins']).num,
+      _d: statOf(e, ['ties']).num,
+      _l: statOf(e, ['losses']).num,
+      _gd: statOf(e, ['pointDifferential', 'goalDifference']).num,
+      _gf: statOf(e, ['pointsFor', 'goalsFor']).num,
+      _pts: statOf(e, ['points']).num,
+    }));
+    const g = { name: child?.name || child?.abbreviation || 'Group', teams };
+    finalizeGroup(g);
+    groups.push(g);
   }
   // Order the groups themselves (Group A, B, ... L).
   groups.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
@@ -169,6 +175,49 @@ function linkMatchesAndGroups(matches, groups) {
   }
 }
 
+function applyResult(t, gf, ga) {
+  t._p += 1;
+  t._gf += gf;
+  t._gd += gf - ga;
+  if (gf > ga) {
+    t._w += 1;
+    t._pts += 3;
+  } else if (gf < ga) {
+    t._l += 1;
+  } else {
+    t._d += 1;
+    t._pts += 1;
+  }
+  t.provisional = true;
+}
+
+// Apply in-progress match scores to the standings so the table reflects the
+// live state (Played +1, points/GD adjusted, re-sorted) — a "live table".
+function applyProvisional(matches, groups) {
+  const lookup = new Map();
+  for (const g of groups) {
+    for (const t of g.teams) {
+      if (t.abbr) lookup.set(norm(t.abbr), { t, g });
+      if (t.name) lookup.set(norm(t.name), { t, g });
+    }
+  }
+
+  const touched = new Set();
+  for (const m of matches) {
+    if (m.state !== 'in') continue;
+    const home = lookup.get(norm(m.home.abbr)) || lookup.get(norm(m.home.name));
+    const away = lookup.get(norm(m.away.abbr)) || lookup.get(norm(m.away.name));
+    if (!home || !away) continue;
+    const hs = parseInt(m.home.score, 10) || 0;
+    const as = parseInt(m.away.score, 10) || 0;
+    applyResult(home.t, hs, as);
+    applyResult(away.t, as, hs);
+    touched.add(home.g);
+    touched.add(away.g);
+  }
+  for (const g of touched) finalizeGroup(g);
+}
+
 async function getWorldCup({ force = false } = {}) {
   if (!force && cache.data && Date.now() - cache.at < TTL_MS) {
     return cache.data;
@@ -204,9 +253,11 @@ async function getWorldCup({ force = false } = {}) {
     errors.push(`standings: ${stRes.reason?.message || stRes.reason}`);
   }
 
-  // Link matches to groups and flag live groups.
+  // Link matches to groups, flag live groups, and overlay live scores so the
+  // standings reflect in-progress games.
   try {
     linkMatchesAndGroups(matches, groups);
+    applyProvisional(matches, groups);
   } catch (e) {
     errors.push(`link: ${e.message}`);
   }
