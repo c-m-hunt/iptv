@@ -121,10 +121,25 @@ export class LivePanels {
 
   _renderScores() {
     if (this.scoresEl.classList.contains('hidden')) return;
-    const body = this.data
-      ? renderScores(this.data.matches || [])
-      : '<div class="panel-empty">Loading…</div>';
-    this.scoresEl.innerHTML = titled('Live Scores', body);
+    if (!this.data) {
+      this.scoresEl.innerHTML = titled('Live Scores', '<div class="panel-empty">Loading…</div>');
+      return;
+    }
+    const matches = this.data.matches || [];
+    const live = matches.filter((m) => m.state === 'in');
+    if (live.length) {
+      this.scoresEl.innerHTML = titled('Live Scores', renderMatchList(live));
+      return;
+    }
+    // Nothing live — show the next few upcoming fixtures so the panel stays useful.
+    const upcoming = matches
+      .filter((m) => m.state === 'pre')
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+      .slice(0, 5);
+    const body = upcoming.length
+      ? renderMatchList(upcoming)
+      : '<div class="panel-empty">No matches scheduled</div>';
+    this.scoresEl.innerHTML = titled(upcoming.length ? 'Up Next' : 'Live Scores', body);
   }
 
   _renderStandings() {
@@ -161,27 +176,33 @@ function flag(url) {
   return url ? `<img class="flag" src="${esc(url)}" alt="" loading="lazy">` : '<span class="flag"></span>';
 }
 
-// -- live scores --------------------------------------------------------
-function renderScores(matches) {
-  const live = (matches || []).filter((m) => m.state === 'in');
-  if (!live.length) return '<div class="panel-empty">No live matches right now</div>';
-  const sorted = [...live].sort((a, b) => String(a.group).localeCompare(String(b.group)));
-  return '<div class="scores">' + sorted.map(renderMatch).join('') + '</div>';
+// -- live scores / upcoming fixtures ------------------------------------
+function renderMatchList(matches) {
+  return '<div class="scores">' + matches.map(renderMatch).join('') + '</div>';
 }
 
 function renderMatch(m) {
+  const live = m.state === 'in';
+  const info = live ? m.clock || 'LIVE' : timeLabel(m.date);
   const head =
     `<div class="sgroup">${m.group ? esc(m.group) + ' · ' : ''}` +
-    `<span class="sclock">${esc(m.clock || 'LIVE')}</span></div>`;
-  return `<div class="smatch">${head}${scoreRow(m.home)}${scoreRow(m.away)}</div>`;
+    `<span class="${live ? 'sclock' : 'stime'}">${esc(info)}</span></div>`;
+  return `<div class="smatch${live ? '' : ' pre'}">${head}${scoreRow(m.home, live)}${scoreRow(m.away, live)}</div>`;
 }
 
-function scoreRow(t) {
+function scoreRow(t, live) {
+  const score = live ? `<span class="sscore">${esc(t.score ?? '')}</span>` : '';
   return (
     `<div class="srow">${flag(t.logo)}` +
-    `<span class="sabbr">${esc(t.abbr || t.name)}</span>` +
-    `<span class="sscore">${esc(t.score ?? '')}</span></div>`
+    `<span class="sabbr">${esc(t.abbr || t.name)}</span>${score}</div>`
   );
+}
+
+function timeLabel(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 // -- group standings ----------------------------------------------------

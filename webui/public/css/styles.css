@@ -323,6 +323,15 @@ body {
   font-weight: 800;
 }
 
+.stime {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.smatch.pre {
+  border-left-color: rgba(255, 255, 255, 0.18);
+}
+
 .srow {
   display: flex;
   align-items: center;
