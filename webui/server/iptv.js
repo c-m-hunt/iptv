@@ -1,0 +1,264 @@
+// iptv.js — credentials, catalogue fetch/cache, and stream URL building.
+// Ported from winx_find.sh. Live channels only.
+//
+// Credential resolution order (highest priority first):
+//   1. IPTV_* environment variables
+//   2. IPTV player app localStorage profile (read via the `sqlite3` CLI)
+//   3. Hardcoded invictusdedi.com defaults
+//
+// The localStorage path is configurable via IPTV_LS_DB so the same code
+// works on a host Mac and inside a container with the file mounted.
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const http = require('http');
+const https = require('https');
+const { execFileSync } = require('child_process');
+
+const CACHE_DIR =
+  process.env.CACHE_DIR ||
+  path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'iptv');
+const CACHE_TTL = Number(process.env.CACHE_TTL || 21600) * 1000; // ms (6h default)
+const CACHE_JSON = path.join(CACHE_DIR, 'live_streams.json');
+
+const DEFAULT_LS_DB =
+  process.env.IPTV_LS_DB ||
+  path.join(
+    os.homedir(),
+    'Library',
+    'Application Support',
+    'WINXMAC',
+    'Local Storage',
+    'file__0.localstorage'
+  );
+
+let cachedCreds = null;
+
+// -- credentials ------------------------------------------------------------
+function readProfileFromLocalStorage() {
+  if (!fs.existsSync(DEFAULT_LS_DB)) return null;
+  let tmp;
+  try {
+    // Copy first: the DB may be locked while the IPTV app is running.
+    tmp = path.join(os.tmpdir(), `iptv-ls-${process.pid}-${Date.now()}.localstorage`);
+    fs.copyFileSync(DEFAULT_LS_DB, tmp);
+    const raw = execFileSync(
+      'sqlite3',
+      [tmp, "SELECT value FROM ItemTable WHERE key='profile';"],
+      { encoding: 'utf8' }
+    );
+    // localStorage values can carry stray NUL bytes (UTF-16 storage) — strip them.
+    const clean = raw.split(String.fromCharCode(0)).join('').trim();
+    if (!clean) return null;
+    return JSON.parse(clean);
+  } catch (err) {
+    console.warn('[iptv] could not read localStorage profile:', err.message);
+    return null;
+  } finally {
+    if (tmp) fs.rmSync(tmp, { force: true });
+  }
+}
+
+function resolveCredentials() {
+  if (cachedCreds) return cachedCreds;
+
+  let fromLs = {};
+  const profile = readProfileFromLocalStorage();
+  if (profile) {
+    fromLs = {
+      U: profile?.user_info?.username || '',
+      P: profile?.user_info?.password || '',
+      LOGIN: profile?.user_info?.login_url || '',
+      SERVER: profile?.server_info?.url || '',
+      PORT: profile?.server_info?.port || '',
+    };
+  }
+
+  const creds = {
+    U: process.env.IPTV_USERNAME || fromLs.U || '',
+    P: process.env.IPTV_PASSWORD || fromLs.P || '',
+    LOGIN: process.env.IPTV_LOGIN_URL || fromLs.LOGIN || 'http://invictusdedi.com',
+    SERVER: process.env.IPTV_SERVER || fromLs.SERVER || 'x1.invictusdedi.com',
+    PORT: process.env.IPTV_PORT || fromLs.PORT || '80',
+  };
+
+  if (!creds.U || !creds.P) {
+    throw new Error(
+      'No IPTV credentials found. Mount the IPTV app localStorage file ' +
+        '(IPTV_LS_DB) or set IPTV_USERNAME / IPTV_PASSWORD.'
+    );
+  }
+
+  cachedCreds = creds;
+  return creds;
+}
+
+function hasCredentials() {
+  try {
+    resolveCredentials();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// -- catalogue --------------------------------------------------------------
+function cacheAgeMs(file) {
+  try {
+    return Date.now() - fs.statSync(file).mtimeMs;
+  } catch {
+    return Infinity;
+  }
+}
+
+async function refreshCatalogue() {
+  const { U, P, LOGIN } = resolveCredentials();
+  const url = new URL(`${LOGIN.replace(/\/$/, '')}/player_api.php`);
+  url.searchParams.set('username', U);
+  url.searchParams.set('password', P);
+  url.searchParams.set('action', 'get_live_streams');
+
+  const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
+  if (!resp.ok) throw new Error(`catalogue fetch failed: HTTP ${resp.status}`);
+  const data = await resp.json();
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.writeFileSync(CACHE_JSON, JSON.stringify(data));
+  return data;
+}
+
+async function loadCatalogue({ force = false } = {}) {
+  if (force || cacheAgeMs(CACHE_JSON) > CACHE_TTL) {
+    try {
+      return await refreshCatalogue();
+    } catch (err) {
+      // Fall back to a stale cache if the refresh failed but we have something.
+      if (fs.existsSync(CACHE_JSON)) {
+        console.warn('[iptv] refresh failed, using stale cache:', err.message);
+      } else {
+        throw err;
+      }
+    }
+  }
+  return JSON.parse(fs.readFileSync(CACHE_JSON, 'utf8'));
+}
+
+// Returns [{ id, name }] of live channels whose name contains ALL hint words
+// (case-insensitive AND match, mirroring winx_find.sh).
+async function getChannels(query = '', { force = false, limit = 200 } = {}) {
+  const catalogue = await loadCatalogue({ force });
+  const tokens = String(query).trim().toLowerCase().split(/\s+/).filter(Boolean);
+
+  const out = [];
+  for (const ch of catalogue) {
+    const name = ch.name || '';
+    const hay = name.toLowerCase();
+    if (tokens.every((t) => hay.includes(t))) {
+      out.push({ id: ch.stream_id, name });
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+function streamUrl(id) {
+  const { U, P, SERVER, PORT } = resolveCredentials();
+  return `http://${SERVER}:${PORT}/live/${U}/${P}/${id}.ts`;
+}
+
+// Pipe a live .ts stream from the IPTV server to the client. Credentials never
+// leave the server; the browser only ever talks to /api/stream/live/:id.
+const STREAM_UA = process.env.IPTV_USER_AGENT || 'VLC/3.0.20 LibVLC/3.0.20';
+const MAX_REDIRECTS = 6;
+
+function proxyStream(id, clientReq, clientRes) {
+  let startUrl;
+  try {
+    startUrl = streamUrl(id);
+  } catch (err) {
+    clientRes.status(500).json({ error: err.message });
+    return;
+  }
+
+  // Xtream servers 302-redirect to a token-authenticated edge node (often a
+  // different host/port, sometimes https). Follow the chain, then pipe the
+  // final 200/206 to the browser.
+  const headers = { 'User-Agent': STREAM_UA, Accept: '*/*' };
+  if (clientReq.headers.range) headers.Range = clientReq.headers.range;
+
+  let active = null;
+  let done = false;
+  const stop = () => {
+    done = true;
+    if (active) active.destroy();
+  };
+  clientReq.on('close', stop);
+
+  const fail = (code, msg) => {
+    if (done) return;
+    if (!clientRes.headersSent) clientRes.status(code).json({ error: msg });
+    else clientRes.end();
+  };
+
+  const go = (url, hop) => {
+    if (done) return;
+    if (hop > MAX_REDIRECTS) return fail(502, 'too many redirects');
+
+    let u;
+    try {
+      u = new URL(url);
+    } catch {
+      return fail(502, 'bad upstream URL');
+    }
+    const mod = u.protocol === 'https:' ? https : http;
+
+    const req = mod.get(u, { headers }, (up) => {
+      const sc = up.statusCode || 0;
+
+      // Redirect — drain and follow.
+      if (sc >= 300 && sc < 400 && up.headers.location) {
+        up.resume();
+        go(new URL(up.headers.location, u).toString(), hop + 1);
+        return;
+      }
+      if (sc >= 400) {
+        up.resume();
+        return fail(502, `upstream HTTP ${sc}`);
+      }
+
+      // Final response — stream it through.
+      active = up;
+      if (!clientRes.headersSent) {
+        clientRes.status(sc || 200);
+        const ct = up.headers['content-type'] || '';
+        clientRes.setHeader('Content-Type', ct.startsWith('video') ? ct : 'video/mp2t');
+        clientRes.setHeader('Cache-Control', 'no-store');
+        for (const h of ['content-length', 'content-range', 'accept-ranges']) {
+          if (up.headers[h]) clientRes.setHeader(h, up.headers[h]);
+        }
+      }
+      up.on('error', () => clientRes.end());
+      up.pipe(clientRes);
+    });
+
+    active = req;
+    req.on('error', (err) => {
+      if (done) return;
+      console.warn('[iptv] stream upstream error:', err.message);
+      fail(502, 'stream error');
+    });
+    req.setTimeout(15000, () => req.destroy(new Error('upstream timeout')));
+  };
+
+  go(startUrl, 0);
+}
+
+module.exports = {
+  CACHE_DIR,
+  hasCredentials,
+  resolveCredentials,
+  getChannels,
+  refreshCatalogue,
+  streamUrl,
+  proxyStream,
+};

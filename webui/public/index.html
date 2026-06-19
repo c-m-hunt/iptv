@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>IPTV Player Grid</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <!-- Everything not covered by video is black via CSS on #stage. -->
+    <div id="stage" tabindex="0">
+      <!-- player slots, drag handle, and corner panels are injected by JS -->
+      <div id="scores-panel" class="corner-panel hidden" aria-label="Live scores"></div>
+      <div id="standings-panel" class="corner-panel hidden" aria-label="Group standings"></div>
+      <div id="handle" class="hidden" aria-label="Resize handle"></div>
+    </div>
+
+    <div id="toolbar">
+      <span class="brand">IPTV</span>
+      <button id="btn-fs" title="Toggle fullscreen (F)">⛶ Fullscreen</button>
+      <button id="btn-add" title="Add a second player">+ Player</button>
+      <button id="btn-remove" class="hidden" title="Remove second player">− Player</button>
+      <button id="btn-layout" class="hidden" title="Cycle layout (horizontal / diagonals)">Layout: —</button>
+      <button id="btn-live" class="hidden" title="Toggle World Cup data (L)">Live data: off</button>
+      <span class="spacer"></span>
+      <span class="hint">F / dbl-click fullscreen · ←/→ resize · D info · 1/2 search · L live · C pin controls</span>
+    </div>
+
+    <div id="help" class="hidden">
+      <h2>Shortcuts</h2>
+      <ul>
+        <li><b>F</b> or <b>double-click</b> the video — toggle fullscreen</li>
+        <li><b>← / →</b> — adjust split proportion (↑ / ↓ too, in diagonal)</li>
+        <li><b>D</b> — toggle player / channel info overlay</li>
+        <li><b>1 / 2</b> — focus a player and (re)open its channel search</li>
+        <li><b>L</b> — toggle World Cup live scores &amp; standings (diagonal only)</li>
+        <li><b>C</b> — pin / unpin the control bar (otherwise it auto-hides)</li>
+      </ul>
+      <p class="muted">Press <b>?</b> to toggle this help.</p>
+    </div>
+
+    <script src="vendor/mpegts.js"></script>
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,447 @@
+/* IPTV Player Grid — black-everywhere player canvas + overlays. */
+
+:root {
+  --accent: #38bdf8;
+  --panel-bg: rgba(8, 10, 14, 0.92);
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --text: #e8edf2;
+  --muted: #9aa6b2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #000;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+}
+
+/* The stage fills the viewport and is the fullscreen target. Black by default. */
+#stage {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  outline: none;
+}
+
+/* --- players ----------------------------------------------------------- */
+.player {
+  position: absolute;
+  background: #000;
+  overflow: hidden;
+  transition: left 0.04s linear, top 0.04s linear, width 0.04s linear, height 0.04s linear;
+}
+
+.player video {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  object-fit: contain;
+  display: block;
+}
+
+/* Focused player gets a subtle ring (only meaningful when 2 players exist). */
+.player.focused.multi {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* Info badge (toggled with D) */
+.player .badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 14px;
+  pointer-events: none;
+  max-width: 80%;
+}
+
+.player.show-info .badge {
+  display: flex;
+}
+
+.player .badge .num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #00131c;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.player .status {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.player.is-error .status,
+.player.is-loading .status {
+  display: flex;
+}
+
+/* --- per-player search overlay ---------------------------------------- */
+.search {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(2px);
+  padding: 24px;
+}
+
+.player.searching .search {
+  display: flex;
+}
+
+.search .search-box {
+  width: min(520px, 86%);
+}
+
+.search input {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 18px;
+  color: var(--text);
+  background: #11151b;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  outline: none;
+}
+
+.search input:focus {
+  border-color: var(--accent);
+}
+
+.search .results {
+  width: min(520px, 86%);
+  max-height: 46%;
+  overflow-y: auto;
+  margin-top: 8px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+}
+
+.search .results:empty {
+  display: none;
+}
+
+.search .result {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search .result:last-child {
+  border-bottom: none;
+}
+
+.search .result.active,
+.search .result:hover {
+  background: rgba(56, 189, 248, 0.18);
+}
+
+.search .meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 16px;
+}
+
+/* --- drag handle ------------------------------------------------------- */
+#handle {
+  position: absolute;
+  z-index: 30;
+  background: transparent;
+}
+
+#handle.vertical {
+  top: 0;
+  height: 100%;
+  width: 14px;
+  margin-left: -7px;
+  cursor: col-resize;
+}
+
+#handle.vertical::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+#handle.point {
+  width: 28px;
+  height: 28px;
+  margin-left: -14px;
+  margin-top: -14px;
+  cursor: move;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.85);
+  border: 2px solid #00131c;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+#handle:hover {
+  filter: brightness(1.15);
+}
+
+/* --- corner panels (World Cup) ---------------------------------------- */
+.corner-panel {
+  position: absolute;
+  z-index: 20;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.corner-panel .panel-title {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--panel-border);
+  color: var(--accent);
+}
+
+.corner-panel .panel-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+/* live scores rows */
+.match {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.match:last-child {
+  border-bottom: none;
+}
+
+.match .teams {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.match .team {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.match .team .nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match .team .sc {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.match .state {
+  align-self: center;
+  text-align: right;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.match .state.live {
+  color: #34d399;
+  font-weight: 700;
+}
+
+.match .state.pre {
+  color: var(--muted);
+}
+
+.match .grp {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* standings tables */
+.group {
+  margin-bottom: 12px;
+}
+
+.group h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+table.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+table.table th,
+table.table td {
+  text-align: right;
+  padding: 2px 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+table.table th:first-child,
+table.table td:first-child {
+  text-align: left;
+}
+
+table.table thead th {
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+table.table td.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.panel-error {
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* --- toolbar ----------------------------------------------------------- */
+#toolbar {
+  position: fixed;
+  z-index: 40;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  transition: opacity 0.3s ease;
+}
+
+#toolbar.faded {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#toolbar .brand {
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+#toolbar .spacer {
+  flex: 1 1 auto;
+}
+
+#toolbar .hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#toolbar button {
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#toolbar button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* --- help -------------------------------------------------------------- */
+#help {
+  position: fixed;
+  z-index: 50;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 20px 26px;
+  max-width: 420px;
+}
+
+#help h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+#help ul {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.7;
+}
+
+#help b {
+  color: var(--accent);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.hidden {
+  display: none !important;
+}

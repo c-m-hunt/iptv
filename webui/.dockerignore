@@ -1,0 +1,6 @@
+**/node_modules
+.env
+.iptv-creds.localstorage
+*.log
+.DS_Store
+.git
