@@ -89,6 +89,18 @@ class App {
     this._scheduleSaveLast();
   }
 
+  // Swap the two players' screen positions (X). Instant — streams stay live;
+  // numbering stays tied to position (1 = big) so the focused screen keeps its
+  // sound and the swapped-in content takes the larger screen.
+  swapPlayers() {
+    if (this.players.length < 2) return;
+    this.players.reverse();
+    this.players.forEach((p, i) => p.setNum(i + 1));
+    this.render();
+    this.toast('Switched screens');
+    this._scheduleSaveLast();
+  }
+
   openSearchFor(num) {
     const p = this.players.find((x) => x.num === num);
     if (!p) return;
@@ -195,6 +207,7 @@ class App {
 
     document.getElementById('btn-add').addEventListener('click', () => this.addPlayer());
     document.getElementById('btn-remove').addEventListener('click', () => this.removePlayer());
+    document.getElementById('btn-swap').addEventListener('click', () => this.swapPlayers());
     document.getElementById('btn-layout').addEventListener('click', () => this.cycleLayout());
     document.getElementById('btn-live').addEventListener('click', () => this.toggleLive());
 
@@ -237,6 +250,7 @@ class App {
     const two = this.players.length === 2;
     document.getElementById('btn-add').classList.toggle('hidden', two);
     document.getElementById('btn-remove').classList.toggle('hidden', !two);
+    document.getElementById('btn-swap').classList.toggle('hidden', !two);
 
     const layoutBtn = document.getElementById('btn-layout');
     layoutBtn.classList.toggle('hidden', !two);

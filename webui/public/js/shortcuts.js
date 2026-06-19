@@ -62,6 +62,12 @@ export function installShortcuts(app) {
         app.toggleControls();
         break;
 
+      case 'x':
+      case 'X':
+        e.preventDefault();
+        app.swapPlayers();
+        break;
+
       case 'p':
       case 'P':
         e.preventDefault();

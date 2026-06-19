@@ -273,6 +273,15 @@ export class Player {
     this.el.classList.toggle('show-info', show);
   }
 
+  // Re-number this player (used when swapping screen positions). The mpegts
+  // stream stays attached — only the badge label changes.
+  setNum(n) {
+    this.num = n;
+    this.el.dataset.num = String(n);
+    const numEl = this.el.querySelector('.badge .num');
+    if (numEl) numEl.textContent = String(n);
+  }
+
   destroy() {
     clearInterval(this._watchdog);
     clearTimeout(this._retryTimer);
