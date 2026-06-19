@@ -31,8 +31,11 @@ const OVERLAP = 0.13;
 // Returns { rects: [r0, r1], handle, corners } for the given mode.
 //   handle: { kind: 'vertical'|'point', x, y } in percent, or null
 //   corners: { scores: rect|null, standings: rect|null } in percent
-export function computeLayout(mode, split) {
+// dataOn: when the World Cup panels are showing, the large player pulls back to
+// the split so it doesn't sit under the panels (overlaps the inset otherwise).
+export function computeLayout(mode, split, dataOn = false) {
   const { x, y } = clampSplit(split);
+  const ov = dataOn ? 0 : OVERLAP;
 
   if (mode === 'single') {
     return {
@@ -54,34 +57,38 @@ export function computeLayout(mode, split) {
   }
 
   if (mode === 'diag-tlbr') {
-    // Player 1 (large) anchored top-left, ending just past the split; player 2
-    // (small) in the bottom-right corner, overlapping player 1 only by OVERLAP.
-    // Free corners (World Cup panels): TR, BL.
+    // Player 1 (large) anchored top-left; player 2 (small) in the bottom-right
+    // corner. The large player ends at the split + ov (overlaps the inset when
+    // data is off; pulls back to the split when data is on). Panels: TR, BL,
+    // positioned beyond the large player so they never sit over the video.
+    const bx = Math.min(1, x + ov);
+    const by = Math.min(1, y + ov);
     return {
       rects: [
-        { x: 0, y: 0, w: Math.min(100, pct(x + OVERLAP)), h: Math.min(100, pct(y + OVERLAP)) },
+        { x: 0, y: 0, w: pct(bx), h: pct(by) },
         { x: pct(x), y: pct(y), w: pct(1 - x), h: pct(1 - y) },
       ],
       handle: { kind: 'point', x: pct(x), y: pct(y) },
       corners: {
-        scores: { x: pct(x), y: 0, w: pct(1 - x), h: pct(y) }, // top-right
-        standings: { x: 0, y: pct(y), w: pct(x), h: pct(1 - y) }, // bottom-left
+        scores: { x: pct(bx), y: 0, w: Math.max(0, pct(1 - bx)), h: pct(y) }, // top-right
+        standings: { x: 0, y: pct(by), w: pct(x), h: Math.max(0, pct(1 - by)) }, // bottom-left
       },
     };
   }
 
   // diag-bltr: player 1 (large) anchored bottom-left; player 2 (small) in the
-  // top-right corner, overlapping player 1 only by OVERLAP. Free corners: TL, BR.
-  const topY = Math.max(0, y - OVERLAP);
+  // top-right corner. Panels: TL, BR, beyond the large player.
+  const topY = Math.max(0, y - ov);
+  const bx = Math.min(1, x + ov);
   return {
     rects: [
-      { x: 0, y: pct(topY), w: Math.min(100, pct(x + OVERLAP)), h: pct(1 - topY) },
+      { x: 0, y: pct(topY), w: pct(bx), h: pct(1 - topY) },
       { x: pct(x), y: 0, w: pct(1 - x), h: pct(y) },
     ],
     handle: { kind: 'point', x: pct(x), y: pct(y) },
     corners: {
-      scores: { x: 0, y: 0, w: pct(x), h: pct(y) }, // top-left
-      standings: { x: pct(x), y: pct(y), w: pct(1 - x), h: pct(1 - y) }, // bottom-right
+      scores: { x: 0, y: 0, w: pct(x), h: pct(topY) }, // top-left
+      standings: { x: pct(bx), y: pct(y), w: Math.max(0, pct(1 - bx)), h: pct(1 - y) }, // bottom-right
     },
   };
 }

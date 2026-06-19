@@ -112,7 +112,7 @@ class App {
 
   render() {
     const mode = this.effectiveMode;
-    const layout = computeLayout(mode, this.split);
+    const layout = computeLayout(mode, this.split, this.live.isVisible());
 
     this.players.forEach((p, i) => {
       const rect = layout.rects[i] || layout.rects[0];
@@ -160,6 +160,7 @@ class App {
 
   toggleLive() {
     this.live.setVisible(!this.live.isVisible());
+    this.render(); // resize the main video to make room for / reclaim from panels
     this._updateToolbar();
     this._scheduleSaveLast();
   }
