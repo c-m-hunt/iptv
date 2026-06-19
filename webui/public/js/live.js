@@ -96,7 +96,15 @@ export class LivePanels {
     const list = this._rotationGroups();
     if (list.length <= 1) return;
     this.groupIdx = (this.groupIdx + 1) % list.length;
-    this._renderStandings();
+    this._renderAll(); // both panels follow the same group
+  }
+
+  // The group currently on display (shared by both panels).
+  _currentGroup() {
+    const list = this._rotationGroups();
+    if (!list.length) return { group: null, idx: 0, total: 0 };
+    if (this.groupIdx >= list.length) this.groupIdx = 0;
+    return { group: list[this.groupIdx], idx: this.groupIdx, total: list.length };
   }
 
   async _fetch() {
@@ -119,27 +127,25 @@ export class LivePanels {
     this._renderStandings();
   }
 
+  // Scores panel: every fixture/result for the current group, live highlighted.
   _renderScores() {
     if (this.scoresEl.classList.contains('hidden')) return;
     if (!this.data) {
-      this.scoresEl.innerHTML = titled('Live Scores', '<div class="panel-empty">Loading…</div>');
+      this.scoresEl.innerHTML = titled('Fixtures', '<div class="panel-empty">Loading…</div>');
       return;
     }
-    const matches = this.data.matches || [];
-    const live = matches.filter((m) => m.state === 'in');
-    if (live.length) {
-      this.scoresEl.innerHTML = titled('Live Scores', renderMatchList(live));
+    const { group } = this._currentGroup();
+    if (!group) {
+      this.scoresEl.innerHTML = titled('Fixtures', '<div class="panel-empty">No fixtures</div>');
       return;
     }
-    // Nothing live — show the next few upcoming fixtures so the panel stays useful.
-    const upcoming = matches
-      .filter((m) => m.state === 'pre')
-      .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-      .slice(0, 5);
-    const body = upcoming.length
-      ? renderMatchList(upcoming)
-      : '<div class="panel-empty">No matches scheduled</div>';
-    this.scoresEl.innerHTML = titled(upcoming.length ? 'Up Next' : 'Live Scores', body);
+    const matches = (this.data.matches || [])
+      .filter((m) => m.group === group.name)
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const body = matches.length
+      ? '<div class="fixtures">' + matches.map(renderMatchRow).join('') + '</div>'
+      : '<div class="panel-empty">No fixtures</div>';
+    this.scoresEl.innerHTML = titled(group.name, body);
   }
 
   _renderStandings() {
@@ -148,24 +154,17 @@ export class LivePanels {
       this.standingsEl.innerHTML = bodyOnly('<div class="panel-empty">Loading…</div>');
       return;
     }
-    const list = this._rotationGroups();
-    if (!list.length) {
+    const { group, idx, total } = this._currentGroup();
+    if (!group) {
       this.standingsEl.innerHTML = bodyOnly('<div class="panel-empty">No standings yet</div>');
       return;
     }
-    if (this.groupIdx >= list.length) this.groupIdx = 0;
-    const g = list[this.groupIdx];
-    const liveMatches = (this.data.matches || []).filter(
-      (m) => m.state === 'in' && m.group === g.name
-    );
-    this.standingsEl.innerHTML = bodyOnly(
-      renderGroup(g, this.groupIdx, list.length, liveMatches)
-    );
+    this.standingsEl.innerHTML = bodyOnly(renderGroup(group, idx, total));
   }
 
   _renderError(msg) {
     const e = `<div class="panel-error">Couldn't load: ${esc(msg)}</div>`;
-    if (!this.scoresEl.classList.contains('hidden')) this.scoresEl.innerHTML = titled('Live Scores', e);
+    if (!this.scoresEl.classList.contains('hidden')) this.scoresEl.innerHTML = titled('Fixtures', e);
     if (!this.standingsEl.classList.contains('hidden')) this.standingsEl.innerHTML = bodyOnly(e);
   }
 }
@@ -182,26 +181,31 @@ function flag(url) {
   return url ? `<img class="flag" src="${esc(url)}" alt="" loading="lazy">` : '<span class="flag"></span>';
 }
 
-// -- live scores / upcoming fixtures ------------------------------------
-function renderMatchList(matches) {
-  return '<div class="scores">' + matches.map(renderMatch).join('') + '</div>';
-}
-
-function renderMatch(m) {
+// -- a single fixture row (finished / live / upcoming) ------------------
+function renderMatchRow(m) {
   const live = m.state === 'in';
-  const info = live ? m.clock || 'LIVE' : timeLabel(m.date);
-  const head =
-    `<div class="sgroup">${m.group ? esc(m.group) + ' · ' : ''}` +
-    `<span class="${live ? 'sclock' : 'stime'}">${esc(info)}</span></div>`;
-  return `<div class="smatch${live ? '' : ' pre'}">${head}${scoreRow(m.home, live)}${scoreRow(m.away, live)}</div>`;
+  const done = m.state === 'post';
+  const cls = live ? 'live' : done ? 'done' : 'pre';
+  const mid =
+    live || done
+      ? `<span class="m-sc">${score(m.home.score)}<i>–</i>${score(m.away.score)}</span>`
+      : `<span class="m-time">${esc(timeLabel(m.date))}</span>`;
+  const tag = live
+    ? `<span class="m-tag live">${esc(m.clock || 'LIVE')}</span>`
+    : done
+      ? '<span class="m-tag">FT</span>'
+      : '';
+  return (
+    `<div class="mrow ${cls}">` +
+    `<span class="m-home">${esc(m.home.abbr || m.home.name)}${flag(m.home.logo)}</span>` +
+    `<span class="m-mid">${mid}${tag}</span>` +
+    `<span class="m-away">${flag(m.away.logo)}${esc(m.away.abbr || m.away.name)}</span>` +
+    `</div>`
+  );
 }
 
-function scoreRow(t, live) {
-  const score = live ? `<span class="sscore">${esc(t.score ?? '')}</span>` : '';
-  return (
-    `<div class="srow">${flag(t.logo)}` +
-    `<span class="sabbr">${esc(t.abbr || t.name)}</span>${score}</div>`
-  );
+function score(v) {
+  return v === '' || v == null ? '' : esc(String(v));
 }
 
 function timeLabel(iso) {
@@ -212,11 +216,8 @@ function timeLabel(iso) {
 }
 
 // -- group standings ----------------------------------------------------
-function renderGroup(g, idx, total, liveMatches = []) {
+function renderGroup(g, idx, total) {
   const liveBadge = g.live ? '<span class="live-badge">● LIVE</span>' : '';
-  const liveScores = liveMatches.length
-    ? '<div class="glives">' + liveMatches.map(liveLine).join('') + '</div>'
-    : '';
   const rows = (g.teams || [])
     .map((t, i) => {
       const cls = (i < 2 ? 'adv' : 'out') + (t.live ? ' tlive' : '');
@@ -233,22 +234,9 @@ function renderGroup(g, idx, total, liveMatches = []) {
   return (
     `<div class="gpanel">` +
     `<div class="gtitle">${esc(g.name)}${liveBadge}<span class="gcount">${idx + 1}/${total}</span></div>` +
-    liveScores +
     `<table class="gtable"><thead><tr>` +
     `<th></th><th></th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th>` +
     `</tr></thead><tbody>${rows}</tbody></table>` +
-    `</div>`
-  );
-}
-
-// Current live score line shown inside a live group's panel.
-function liveLine(m) {
-  return (
-    `<div class="glive">` +
-    `${flag(m.home.logo)}<span class="gl-ab">${esc(m.home.abbr || m.home.name)}</span>` +
-    `<span class="gl-sc">${esc(m.home.score ?? '')}–${esc(m.away.score ?? '')}</span>` +
-    `<span class="gl-ab">${esc(m.away.abbr || m.away.name)}</span>${flag(m.away.logo)}` +
-    `<span class="gl-ck">${esc(m.clock || 'LIVE')}</span>` +
     `</div>`
   );
 }
