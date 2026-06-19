@@ -51,10 +51,11 @@ export function computeLayout(mode, split) {
   }
 
   if (mode === 'diag-tlbr') {
-    // Player 1 top-left, player 2 bottom-right. Free corners: TR, BL.
+    // Player 1 fills the screen; player 2 overlaps as an inset in the
+    // bottom-right corner. Free corners (World Cup panels): TR, BL.
     return {
       rects: [
-        { x: 0, y: 0, w: pct(x), h: pct(y) },
+        { x: 0, y: 0, w: 100, h: 100 },
         { x: pct(x), y: pct(y), w: pct(1 - x), h: pct(1 - y) },
       ],
       handle: { kind: 'point', x: pct(x), y: pct(y) },
@@ -65,10 +66,11 @@ export function computeLayout(mode, split) {
     };
   }
 
-  // diag-bltr: player 1 bottom-left, player 2 top-right. Free corners: TL, BR.
+  // diag-bltr: player 1 fills the screen; player 2 overlaps as an inset in the
+  // top-right corner. Free corners: TL, BR.
   return {
     rects: [
-      { x: 0, y: pct(y), w: pct(x), h: pct(1 - y) },
+      { x: 0, y: 0, w: 100, h: 100 },
       { x: pct(x), y: 0, w: pct(1 - x), h: pct(y) },
     ],
     handle: { kind: 'point', x: pct(x), y: pct(y) },

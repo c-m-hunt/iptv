@@ -13,6 +13,13 @@ export function installShortcuts(app) {
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
 
+    // Digits 1–9 are context-sensitive (save-mode / presets / player focus).
+    if (/^[1-9]$/.test(e.key)) {
+      e.preventDefault();
+      app.handleDigit(Number(e.key));
+      return;
+    }
+
     switch (e.key) {
       case 'f':
       case 'F':
@@ -55,13 +62,20 @@ export function installShortcuts(app) {
         app.toggleControls();
         break;
 
-      case '1':
+      case 'p':
+      case 'P':
         e.preventDefault();
-        app.openSearchFor(1);
+        app.togglePresets();
         break;
-      case '2':
+
+      case 's':
+      case 'S':
         e.preventDefault();
-        app.openSearchFor(2);
+        app.beginSavePreset();
+        break;
+
+      case 'Escape':
+        if (app.cancelTransient()) e.preventDefault();
         break;
 
       case '?':

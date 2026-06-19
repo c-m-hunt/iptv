@@ -2,6 +2,7 @@
 
 import { Player } from './player.js';
 import { LivePanels } from './live.js';
+import { Presets } from './presets.js';
 import { computeLayout, clampSplit, MODES, MODE_LABELS } from './layout.js';
 import { installShortcuts } from './shortcuts.js';
 
@@ -17,6 +18,15 @@ class App {
       document.getElementById('standings-panel')
     );
 
+    this.toastEl = document.getElementById('toast');
+    this.presets = new Presets(document.getElementById('presets'), {
+      onLoad: (setup) => this.applySetup(setup),
+      onSaveRequest: (slot) => this.savePresetToSlot(slot),
+    });
+    this._awaitingSave = false;
+    this._lastKey = 'iptv-last-setup-v1';
+    this._canUnmute = false; // becomes true after the first user gesture
+
     this.players = [];
     this.layoutMode = 'horizontal'; // arrangement used once there are 2 players
     this.split = { x: 0.5, y: 0.5 };
@@ -27,11 +37,17 @@ class App {
     this._wireControls();
     this._wireHandle();
     this._wireFullscreenGestures();
+    this._wirePresets();
     installShortcuts(this);
     this.render();
 
-    // Auto-select the first player's search on load.
-    this.players[0].openSearch();
+    // Restore the previous session's setup, or start with an empty search.
+    const last = this._readLast();
+    if (last && (last.channels || []).some(Boolean)) {
+      this.applySetup(last, { toast: false });
+    } else {
+      this.players[0].openSearch();
+    }
   }
 
   get effectiveMode() {
@@ -70,6 +86,7 @@ class App {
     if (!this.players.some((p) => p.num === num)) return;
     this.focusedNum = num;
     this._applyFocus();
+    this._scheduleSaveLast();
   }
 
   openSearchFor(num) {
@@ -102,6 +119,10 @@ class App {
       p.setRect(rect);
     });
 
+    // In diagonal modes player 2 is the smaller overlapping inset.
+    const diagonal = mode === 'diag-tlbr' || mode === 'diag-bltr';
+    this.players.forEach((p, i) => p.el.classList.toggle('inset', diagonal && i === 1));
+
     // Drag handle
     if (layout.handle) {
       this.handleEl.classList.remove('hidden', 'vertical', 'point');
@@ -118,11 +139,14 @@ class App {
     this._applyFocus();
     this._applyInfo();
     this._updateToolbar();
+    this._scheduleSaveLast();
   }
 
   _applyFocus() {
     const multi = this.players.length > 1;
-    this.players.forEach((p) => p.setFocused(p.num === this.focusedNum, multi));
+    this.players.forEach((p) =>
+      p.setFocused(p.num === this.focusedNum, multi, this._canUnmute)
+    );
   }
 
   _applyInfo() {
@@ -137,6 +161,7 @@ class App {
   toggleLive() {
     this.live.setVisible(!this.live.isVisible());
     this._updateToolbar();
+    this._scheduleSaveLast();
   }
 
   toggleHelp() {
@@ -171,6 +196,15 @@ class App {
     document.getElementById('btn-remove').addEventListener('click', () => this.removePlayer());
     document.getElementById('btn-layout').addEventListener('click', () => this.cycleLayout());
     document.getElementById('btn-live').addEventListener('click', () => this.toggleLive());
+
+    // First user gesture unlocks audio: unmute the focused player.
+    const unlock = () => {
+      if (this._canUnmute) return;
+      this._canUnmute = true;
+      this._applyFocus();
+    };
+    document.addEventListener('pointerdown', unlock);
+    document.addEventListener('keydown', unlock);
 
     // Reveal the control bar AND the drag handle on mouse movement, then hide
     // both after the same idle period (unless pinned with C).
@@ -256,6 +290,133 @@ class App {
     this.handleEl.addEventListener('pointermove', move);
     this.handleEl.addEventListener('pointerup', up);
     this.handleEl.addEventListener('pointercancel', up);
+  }
+
+  // -- presets ------------------------------------------------------------
+  _wirePresets() {
+    // Open when the mouse reaches the right edge; close on leaving the panel
+    // (unless pinned open via P).
+    document.addEventListener('mousemove', (e) => {
+      if (e.clientX >= window.innerWidth - 3) this.presets.open();
+    });
+    this.presets.panel.addEventListener('mouseleave', () => this.presets.close());
+  }
+
+  togglePresets() {
+    this.presets.toggle();
+  }
+
+  // Snapshot of everything a preset restores.
+  getSetup() {
+    return {
+      channels: this.players.map((p) =>
+        p.channel ? { id: p.channel.id, name: p.channel.name } : null
+      ),
+      layoutMode: this.layoutMode,
+      split: { x: this.split.x, y: this.split.y },
+      focusedNum: this.focusedNum,
+      live: this.live.isVisible(),
+    };
+  }
+
+  applySetup(s, { toast = true } = {}) {
+    if (!s) return;
+    const want = Math.max(1, Math.min(2, (s.channels || []).length || 1));
+    while (this.players.length > want) this._removeLastPlayer();
+    while (this.players.length < want) this._addPlayer();
+
+    (s.channels || []).forEach((ch, i) => {
+      const p = this.players[i];
+      if (!p || !ch) return;
+      if (!p.channel || p.channel.id !== ch.id) p.setChannel(ch);
+      else p.closeSearch();
+    });
+
+    if (s.layoutMode) this.layoutMode = s.layoutMode;
+    if (s.split) this.split = clampSplit({ x: s.split.x, y: s.split.y });
+    this.focusedNum = Math.min(s.focusedNum || 1, this.players.length);
+    this.live.setVisible(!!s.live);
+    this.render();
+    if (toast) this.toast('Loaded preset');
+  }
+
+  // -- last-setup persistence (restored on next page load) ----------------
+  _readLast() {
+    try {
+      return JSON.parse(localStorage.getItem(this._lastKey));
+    } catch {
+      return null;
+    }
+  }
+
+  _scheduleSaveLast() {
+    clearTimeout(this._saveLastTimer);
+    this._saveLastTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(this._lastKey, JSON.stringify(this.getSetup()));
+      } catch {
+        /* storage disabled — setup just won't persist */
+      }
+    }, 600);
+  }
+
+  _removeLastPlayer() {
+    const p = this.players.pop();
+    if (p) p.destroy();
+  }
+
+  // Save flow: S puts us in "awaiting slot", the next 1–9 saves there.
+  beginSavePreset() {
+    this._awaitingSave = true;
+    this.toast('Save preset — press 1–9 (Esc to cancel)', 4000);
+    clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => {
+      this._awaitingSave = false;
+    }, 4000);
+  }
+
+  savePresetToSlot(slot) {
+    this._awaitingSave = false;
+    clearTimeout(this._saveTimer);
+    this.presets.save(slot, this.getSetup());
+    this.toast(`Saved preset ${slot}`);
+  }
+
+  // Routes 1–9: save-mode → save; panel open → load; else → focus player 1/2.
+  handleDigit(n) {
+    if (this._awaitingSave) {
+      this.savePresetToSlot(n);
+      return;
+    }
+    if (this.presets.isOpen()) {
+      if (!this.presets.selectByNumber(n)) this.toast(`Slot ${n} is empty`, 1200);
+      return;
+    }
+    if (n === 1 || n === 2) this.openSearchFor(n);
+  }
+
+  // Esc: cancel save-mode / close the panel. Returns true if it did something.
+  cancelTransient() {
+    let did = false;
+    if (this._awaitingSave) {
+      this._awaitingSave = false;
+      clearTimeout(this._saveTimer);
+      this.toast('Save cancelled', 1000);
+      did = true;
+    }
+    if (this.presets.isOpen()) {
+      this.presets.forceClose();
+      did = true;
+    }
+    return did;
+  }
+
+  toast(message, ms = 1600) {
+    const el = this.toastEl;
+    el.textContent = message;
+    el.classList.add('show');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => el.classList.remove('show'), ms);
   }
 }
 
