@@ -1,10 +1,10 @@
-// live.js — World Cup scores + standings panels for the diagonal black corners.
+// live.js — World Cup scores + standings panels for the diagonal corners.
 //
-// Data comes from /api/worldcup (server-proxied ESPN). Panels are only shown
-// when (a) the user has toggled live data on (L) AND (b) the current layout has
-// free corners (i.e. a diagonal layout). Polling runs only while visible.
+// Built for a passive display (no scrolling): the standings panel shows one
+// group at a time and auto-rotates, prioritising groups that have a live game.
 
-const POLL_MS = 60000; // refresh once a minute — live enough, not noisy
+const POLL_MS = 60000; // refresh data once a minute
+const ROTATE_MS = 8000; // rotate the displayed group
 
 export class LivePanels {
   constructor(scoresEl, standingsEl) {
@@ -13,11 +13,12 @@ export class LivePanels {
     this.visible = false;
     this.corners = { scores: null, standings: null };
     this.data = null;
-    this.timer = null;
+    this.pollTimer = null;
+    this.rotateTimer = null;
+    this.groupIdx = 0;
     this.inFlight = false;
   }
 
-  // Toggle from the L key.
   setVisible(on) {
     this.visible = on;
     this._sync();
@@ -27,7 +28,6 @@ export class LivePanels {
     return this.visible;
   }
 
-  // Called whenever the layout changes; corners are rects (percent) or null.
   setCorners(corners) {
     this.corners = corners || { scores: null, standings: null };
     this._sync();
@@ -36,15 +36,16 @@ export class LivePanels {
   _sync() {
     const showScores = this.visible && !!this.corners.scores;
     const showStandings = this.visible && !!this.corners.standings;
-
     this._place(this.scoresEl, showScores ? this.corners.scores : null);
     this._place(this.standingsEl, showStandings ? this.corners.standings : null);
 
     if (showScores || showStandings) {
-      this._renderInto();
+      this._renderAll();
       this._startPolling();
+      this._startRotation();
     } else {
       this._stopPolling();
+      this._stopRotation();
     }
   }
 
@@ -54,7 +55,6 @@ export class LivePanels {
       return;
     }
     el.classList.remove('hidden');
-    // Inset slightly so the panel doesn't touch the video edges.
     const pad = 1.2;
     el.style.left = rect.x + pad + '%';
     el.style.top = rect.y + pad + '%';
@@ -63,16 +63,40 @@ export class LivePanels {
   }
 
   _startPolling() {
-    if (this.timer) return;
+    if (this.pollTimer) return;
     this._fetch();
-    this.timer = setInterval(() => this._fetch(), POLL_MS);
+    this.pollTimer = setInterval(() => this._fetch(), POLL_MS);
+  }
+  _stopPolling() {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
   }
 
-  _stopPolling() {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
+  _startRotation() {
+    if (this.rotateTimer) return;
+    this.rotateTimer = setInterval(() => this._rotate(), ROTATE_MS);
+  }
+  _stopRotation() {
+    if (this.rotateTimer) {
+      clearInterval(this.rotateTimer);
+      this.rotateTimer = null;
     }
+  }
+
+  // Groups to rotate through: live groups if any are in play, else all of them.
+  _rotationGroups() {
+    const groups = (this.data && this.data.groups) || [];
+    const live = groups.filter((g) => g.live);
+    return live.length ? live : groups;
+  }
+
+  _rotate() {
+    const list = this._rotationGroups();
+    if (list.length <= 1) return;
+    this.groupIdx = (this.groupIdx + 1) % list.length;
+    this._renderStandings();
   }
 
   async _fetch() {
@@ -82,7 +106,7 @@ export class LivePanels {
       const resp = await fetch('/api/worldcup');
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       this.data = await resp.json();
-      this._renderInto();
+      this._renderAll();
     } catch (err) {
       this._renderError(err.message);
     } finally {
@@ -90,101 +114,107 @@ export class LivePanels {
     }
   }
 
-  _renderInto() {
+  _renderAll() {
+    this._renderScores();
+    this._renderStandings();
+  }
+
+  _renderScores() {
+    if (this.scoresEl.classList.contains('hidden')) return;
+    const body = this.data
+      ? renderScores(this.data.matches || [])
+      : '<div class="panel-empty">Loading…</div>';
+    this.scoresEl.innerHTML = titled('Live Scores', body);
+  }
+
+  _renderStandings() {
+    if (this.standingsEl.classList.contains('hidden')) return;
     if (!this.data) {
-      this.scoresEl.innerHTML = panelShell('Live Scores', '<div class="panel-error">Loading…</div>');
-      this.standingsEl.innerHTML = panelShell('Group Standings', '<div class="panel-error">Loading…</div>');
+      this.standingsEl.innerHTML = bodyOnly('<div class="panel-empty">Loading…</div>');
       return;
     }
-    this.scoresEl.innerHTML = panelShell('Live Scores', renderScores(this.data.matches || []));
-    this.standingsEl.innerHTML = panelShell('Group Standings', renderStandings(this.data.groups || []));
+    const list = this._rotationGroups();
+    if (!list.length) {
+      this.standingsEl.innerHTML = bodyOnly('<div class="panel-empty">No standings yet</div>');
+      return;
+    }
+    if (this.groupIdx >= list.length) this.groupIdx = 0;
+    this.standingsEl.innerHTML = bodyOnly(renderGroup(list[this.groupIdx], this.groupIdx, list.length));
   }
 
   _renderError(msg) {
-    const body = `<div class="panel-error">Couldn't load World Cup data: ${escapeHtml(msg)}</div>`;
-    if (!this.scoresEl.classList.contains('hidden')) this.scoresEl.innerHTML = panelShell('Live Scores', body);
-    if (!this.standingsEl.classList.contains('hidden'))
-      this.standingsEl.innerHTML = panelShell('Group Standings', body);
+    const e = `<div class="panel-error">Couldn't load: ${esc(msg)}</div>`;
+    if (!this.scoresEl.classList.contains('hidden')) this.scoresEl.innerHTML = titled('Live Scores', e);
+    if (!this.standingsEl.classList.contains('hidden')) this.standingsEl.innerHTML = bodyOnly(e);
   }
 }
 
-function panelShell(title, bodyHtml) {
-  return `<div class="panel-title">${title}</div><div class="panel-body">${bodyHtml}</div>`;
+function titled(title, body) {
+  return `<div class="panel-title">${esc(title)}</div><div class="panel-body">${body}</div>`;
 }
 
-// Only currently in-progress matches.
+function bodyOnly(body) {
+  return `<div class="panel-body">${body}</div>`;
+}
+
+function flag(url) {
+  return url ? `<img class="flag" src="${esc(url)}" alt="" loading="lazy">` : '<span class="flag"></span>';
+}
+
+// -- live scores --------------------------------------------------------
 function renderScores(matches) {
   const live = (matches || []).filter((m) => m.state === 'in');
-  if (!live.length) return '<div class="panel-error">No live matches right now.</div>';
-  const sorted = [...live].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  return sorted.map(renderMatch).join('');
+  if (!live.length) return '<div class="panel-empty">No live matches right now</div>';
+  const sorted = [...live].sort((a, b) => String(a.group).localeCompare(String(b.group)));
+  return '<div class="scores">' + sorted.map(renderMatch).join('') + '</div>';
 }
 
 function renderMatch(m) {
-  const live = m.state === 'in';
-  const stateClass = live ? 'live' : m.state === 'pre' ? 'pre' : 'post';
-  const stateText = live ? m.clock || 'LIVE' : m.state === 'pre' ? timeLabel(m.date) : m.detail || 'FT';
-  const grp = m.group ? `<div class="grp">${escapeHtml(m.group)}</div>` : '';
+  const head =
+    `<div class="sgroup">${m.group ? esc(m.group) + ' · ' : ''}` +
+    `<span class="sclock">${esc(m.clock || 'LIVE')}</span></div>`;
+  return `<div class="smatch">${head}${scoreRow(m.home)}${scoreRow(m.away)}</div>`;
+}
+
+function scoreRow(t) {
   return (
-    `<div class="match">` +
-    `<div class="teams">` +
-    teamRow(m.home) +
-    teamRow(m.away) +
-    `</div>` +
-    `<div class="state ${stateClass}">${escapeHtml(stateText)}</div>` +
-    grp +
-    `</div>`
+    `<div class="srow">${flag(t.logo)}` +
+    `<span class="sabbr">${esc(t.abbr || t.name)}</span>` +
+    `<span class="sscore">${esc(t.score ?? '')}</span></div>`
   );
 }
 
-function teamRow(t) {
-  const name = t.abbr || t.name || '?';
-  return (
-    `<div class="team">` +
-    `<span class="nm">${escapeHtml(name)}</span>` +
-    `<span class="sc">${escapeHtml(t.score ?? '')}</span>` +
-    `</div>`
-  );
-}
-
-function renderStandings(groups) {
-  if (!groups.length) return '<div class="panel-error">No standings yet.</div>';
-  return groups.map(renderGroup).join('');
-}
-
-function renderGroup(g) {
+// -- group standings ----------------------------------------------------
+function renderGroup(g, idx, total) {
+  const liveBadge = g.live ? '<span class="live-badge">● LIVE</span>' : '';
   const rows = (g.teams || [])
-    .map(
-      (t) =>
-        `<tr>` +
-        `<td class="name">${escapeHtml(t.abbr || t.name)}</td>` +
-        `<td>${cell(t.p)}</td><td>${cell(t.w)}</td><td>${cell(t.d)}</td>` +
-        `<td>${cell(t.l)}</td><td>${cell(t.gd)}</td><td><b>${cell(t.pts)}</b></td>` +
+    .map((t, i) => {
+      const cls = (i < 2 ? 'adv' : 'out') + (t.live ? ' tlive' : '');
+      return (
+        `<tr class="${cls}">` +
+        `<td class="pos">${i + 1}</td>` +
+        `<td class="tm">${flag(t.logo)}<span>${esc(t.abbr || t.name)}</span></td>` +
+        `<td>${cell(t.p)}</td><td>${cell(t.w)}</td><td>${cell(t.d)}</td><td>${cell(t.l)}</td>` +
+        `<td>${cell(t.gd)}</td><td class="ptsc"><b>${cell(t.pts)}</b></td>` +
         `</tr>`
-    )
+      );
+    })
     .join('');
   return (
-    `<div class="group">` +
-    `<h4>${escapeHtml(g.name)}</h4>` +
-    `<table class="table"><thead><tr>` +
-    `<th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th>` +
+    `<div class="gpanel">` +
+    `<div class="gtitle">${esc(g.name)}${liveBadge}<span class="gcount">${idx + 1}/${total}</span></div>` +
+    `<table class="gtable"><thead><tr>` +
+    `<th></th><th></th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th>` +
     `</tr></thead><tbody>${rows}</tbody></table>` +
     `</div>`
   );
 }
 
 function cell(v) {
-  return v === '' || v == null ? '–' : escapeHtml(String(v));
+  return v === '' || v == null ? '–' : esc(String(v));
 }
 
-function timeLabel(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function escapeHtml(s) {
+function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;',
     '<': '&lt;',
