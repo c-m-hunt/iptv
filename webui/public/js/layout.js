@@ -25,6 +25,9 @@ export function clampSplit(split) {
 
 const pct = (v) => v * 100;
 
+// How much the small (inset) player overlaps the large one in diagonal mode.
+const OVERLAP = 0.13;
+
 // Returns { rects: [r0, r1], handle, corners } for the given mode.
 //   handle: { kind: 'vertical'|'point', x, y } in percent, or null
 //   corners: { scores: rect|null, standings: rect|null } in percent
@@ -51,11 +54,12 @@ export function computeLayout(mode, split) {
   }
 
   if (mode === 'diag-tlbr') {
-    // Player 1 fills the screen; player 2 overlaps as an inset in the
-    // bottom-right corner. Free corners (World Cup panels): TR, BL.
+    // Player 1 (large) anchored top-left, ending just past the split; player 2
+    // (small) in the bottom-right corner, overlapping player 1 only by OVERLAP.
+    // Free corners (World Cup panels): TR, BL.
     return {
       rects: [
-        { x: 0, y: 0, w: 100, h: 100 },
+        { x: 0, y: 0, w: Math.min(100, pct(x + OVERLAP)), h: Math.min(100, pct(y + OVERLAP)) },
         { x: pct(x), y: pct(y), w: pct(1 - x), h: pct(1 - y) },
       ],
       handle: { kind: 'point', x: pct(x), y: pct(y) },
@@ -66,11 +70,12 @@ export function computeLayout(mode, split) {
     };
   }
 
-  // diag-bltr: player 1 fills the screen; player 2 overlaps as an inset in the
-  // top-right corner. Free corners: TL, BR.
+  // diag-bltr: player 1 (large) anchored bottom-left; player 2 (small) in the
+  // top-right corner, overlapping player 1 only by OVERLAP. Free corners: TL, BR.
+  const topY = Math.max(0, y - OVERLAP);
   return {
     rects: [
-      { x: 0, y: 0, w: 100, h: 100 },
+      { x: 0, y: pct(topY), w: Math.min(100, pct(x + OVERLAP)), h: pct(1 - topY) },
       { x: pct(x), y: 0, w: pct(1 - x), h: pct(y) },
     ],
     handle: { kind: 'point', x: pct(x), y: pct(y) },
