@@ -69,6 +69,23 @@ function parseScoreboard(json) {
   });
 }
 
+function statOf(entry, names) {
+  for (const n of names) {
+    const s = (entry.stats || []).find(
+      (x) => x.name === n || x.type === n || x.abbreviation === n
+    );
+    if (s) {
+      const num = typeof s.value === 'number' ? s.value : Number(s.value);
+      return { num: Number.isFinite(num) ? num : 0, disp: s.displayValue ?? String(s.value ?? '') };
+    }
+  }
+  return { num: 0, disp: '' };
+}
+
+function teamLogo(team) {
+  return team?.logos?.[0]?.href || team?.logo || '';
+}
+
 function parseStandings(json) {
   // ESPN nests groups under children[]; each child has standings.entries[].
   const groups = [];
@@ -76,24 +93,80 @@ function parseStandings(json) {
   for (const child of children) {
     const entries = child?.standings?.entries || [];
     const teams = entries.map((e) => {
-      const stat = (name) => {
-        const s = (e.stats || []).find((x) => x.name === name || x.type === name);
-        return s ? (s.displayValue ?? String(s.value ?? '')) : '';
-      };
+      const pts = statOf(e, ['points']);
+      const gd = statOf(e, ['pointDifferential', 'goalDifference']);
+      const gf = statOf(e, ['pointsFor', 'goalsFor']);
       return {
         name: e?.team?.shortDisplayName || e?.team?.displayName || e?.team?.name || '?',
         abbr: e?.team?.abbreviation || '',
-        p: stat('gamesPlayed'),
-        w: stat('wins'),
-        d: stat('ties'),
-        l: stat('losses'),
-        gd: stat('pointDifferential') || stat('goalDifference'),
-        pts: stat('points'),
+        logo: teamLogo(e?.team),
+        p: statOf(e, ['gamesPlayed']).disp,
+        w: statOf(e, ['wins']).disp,
+        d: statOf(e, ['ties']).disp,
+        l: statOf(e, ['losses']).disp,
+        gd: gd.disp,
+        pts: pts.disp,
+        _pts: pts.num,
+        _gd: gd.num,
+        _gf: gf.num,
       };
+    });
+    // Sort by points, then goal difference, then goals for, then name.
+    teams.sort(
+      (a, b) => b._pts - a._pts || b._gd - a._gd || b._gf - a._gf || a.name.localeCompare(b.name)
+    );
+    teams.forEach((t, i) => {
+      t.rank = i + 1;
+      delete t._pts;
+      delete t._gd;
+      delete t._gf;
     });
     groups.push({ name: child?.name || child?.abbreviation || 'Group', teams });
   }
+  // Order the groups themselves (Group A, B, ... L).
+  groups.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   return groups;
+}
+
+const norm = (s) => String(s || '').toLowerCase().trim();
+
+// Cross-reference matches and standings: derive each match's group from the
+// standings (ESPN often omits it on the scoreboard) and flag which groups have
+// a live game right now.
+function linkMatchesAndGroups(matches, groups) {
+  const teamToGroup = new Map();
+  for (const g of groups) {
+    for (const t of g.teams) {
+      if (t.abbr) teamToGroup.set(norm(t.abbr), g);
+      if (t.name) teamToGroup.set(norm(t.name), g);
+    }
+  }
+
+  for (const m of matches) {
+    const g =
+      teamToGroup.get(norm(m.home.abbr)) ||
+      teamToGroup.get(norm(m.home.name)) ||
+      teamToGroup.get(norm(m.away.abbr)) ||
+      teamToGroup.get(norm(m.away.name));
+    if (g) m.group = g.name;
+  }
+
+  const liveTeams = new Set();
+  for (const m of matches) {
+    if (m.state === 'in') {
+      for (const t of [m.home, m.away]) {
+        liveTeams.add(norm(t.abbr));
+        liveTeams.add(norm(t.name));
+      }
+    }
+  }
+  for (const g of groups) {
+    g.live = false;
+    for (const t of g.teams) {
+      t.live = liveTeams.has(norm(t.abbr)) || liveTeams.has(norm(t.name));
+      if (t.live) g.live = true;
+    }
+  }
 }
 
 async function getWorldCup({ force = false } = {}) {
@@ -129,6 +202,13 @@ async function getWorldCup({ force = false } = {}) {
     }
   } else {
     errors.push(`standings: ${stRes.reason?.message || stRes.reason}`);
+  }
+
+  // Link matches to groups and flag live groups.
+  try {
+    linkMatchesAndGroups(matches, groups);
+  } catch (e) {
+    errors.push(`link: ${e.message}`);
   }
 
   const data = { matches, groups, errors, fetchedAt: new Date().toISOString() };
