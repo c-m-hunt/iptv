@@ -199,12 +199,15 @@ body {
   z-index: 30;
   background: transparent;
   transition: opacity 0.3s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
 }
 
-/* Hidden along with the toolbar after the mouse goes idle. */
+/* Dimmed along with the toolbar after the mouse goes idle, but still grabbable —
+   a click at the split point starts a drag, and it reappears as you approach. */
 #handle.faded {
   opacity: 0;
-  pointer-events: none;
 }
 
 #handle.vertical {
