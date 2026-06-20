@@ -131,77 +131,90 @@ export class LivePanels {
   _renderScores() {
     if (this.scoresEl.classList.contains('hidden')) return;
     if (!this.data) {
-      this.scoresEl.innerHTML = titled('Fixtures', '<div class="panel-empty">Loading…</div>');
+      this.scoresEl.innerHTML = wrap('<div class="panel-empty">Loading…</div>');
       return;
     }
     const { group } = this._currentGroup();
     if (!group) {
-      this.scoresEl.innerHTML = titled('Fixtures', '<div class="panel-empty">No fixtures</div>');
+      this.scoresEl.innerHTML = wrap('<div class="panel-empty">No fixtures</div>');
       return;
     }
     const matches = (this.data.matches || [])
       .filter((m) => m.group === group.name)
       .sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    const body = matches.length
-      ? '<div class="fixtures">' + matches.map(renderMatchRow).join('') + '</div>'
-      : '<div class="panel-empty">No fixtures</div>';
-    this.scoresEl.innerHTML = titled(group.name, body);
+    this.scoresEl.innerHTML = renderFixtures(group, matches);
   }
 
   _renderStandings() {
     if (this.standingsEl.classList.contains('hidden')) return;
     if (!this.data) {
-      this.standingsEl.innerHTML = bodyOnly('<div class="panel-empty">Loading…</div>');
+      this.standingsEl.innerHTML = wrap('<div class="panel-empty">Loading…</div>');
       return;
     }
     const { group, idx, total } = this._currentGroup();
     if (!group) {
-      this.standingsEl.innerHTML = bodyOnly('<div class="panel-empty">No standings yet</div>');
+      this.standingsEl.innerHTML = wrap('<div class="panel-empty">No standings yet</div>');
       return;
     }
-    this.standingsEl.innerHTML = bodyOnly(renderGroup(group, idx, total));
+    this.standingsEl.innerHTML = renderGroup(group, idx, total);
   }
 
   _renderError(msg) {
     const e = `<div class="panel-error">Couldn't load: ${esc(msg)}</div>`;
-    if (!this.scoresEl.classList.contains('hidden')) this.scoresEl.innerHTML = titled('Fixtures', e);
-    if (!this.standingsEl.classList.contains('hidden')) this.standingsEl.innerHTML = bodyOnly(e);
+    if (!this.scoresEl.classList.contains('hidden')) this.scoresEl.innerHTML = wrap(e);
+    if (!this.standingsEl.classList.contains('hidden')) this.standingsEl.innerHTML = wrap(e);
   }
 }
 
-function titled(title, body) {
-  return `<div class="panel-title">${esc(title)}</div><div class="panel-body">${body}</div>`;
+// -- broadcast card chrome (ported from the StandingsTable / FixtureCard design)
+function accent() {
+  return '<div class="bc-accent"><span class="bc-sheen"></span></div>';
 }
-
-function bodyOnly(body) {
-  return `<div class="panel-body">${body}</div>`;
+function wrap(inner) {
+  return accent() + inner;
+}
+function bcHead(name, pill) {
+  return (
+    '<div class="bc-head">' +
+    `<div class="bc-title"><span class="bc-bar"></span><span class="bc-name">${esc(name)}</span></div>` +
+    (pill
+      ? `<div class="bc-pill"><span class="bc-pill-l">Matchday</span><span class="bc-pill-v">${esc(pill)}</span></div>`
+      : '') +
+    '</div>'
+  );
 }
 
 function flag(url) {
   return url ? `<img class="flag" src="${esc(url)}" alt="" loading="lazy">` : '<span class="flag"></span>';
 }
 
-// -- a single fixture row (finished / live / upcoming) ------------------
+// -- fixtures list (broadcast theme) ------------------------------------
+function renderFixtures(group, matches) {
+  const body = matches.length
+    ? '<div class="fix-list">' + matches.map(renderMatchRow).join('') + '</div>'
+    : '<div class="panel-empty">No fixtures</div>';
+  return accent() + bcHead(group.name) + body;
+}
+
 function renderMatchRow(m) {
   const live = m.state === 'in';
   const done = m.state === 'post';
   const cls = live ? 'live' : done ? 'done' : 'pre';
   const mid =
     live || done
-      ? `<span class="m-sc">${score(m.home.score)}<i>–</i>${score(m.away.score)}</span>`
-      : '<span class="m-vs">v</span>';
-  // The live clock / FT / kickoff time sits after the second team.
-  const end = live
-    ? `<span class="m-tag live">${esc(m.clock || 'LIVE')}</span>`
+      ? `<span class="fx-sc">${score(m.home.score)}<i>–</i>${score(m.away.score)}</span>`
+      : '<span class="fx-v">v</span>';
+  const tag = live
+    ? `<span class="fx-tag live"><span class="fx-dot"></span>${esc(m.clock || 'LIVE')}</span>`
     : done
-      ? '<span class="m-tag">FT</span>'
-      : `<span class="m-tag">${esc(timeLabel(m.date))}</span>`;
+      ? '<span class="fx-tag">FT</span>'
+      : `<span class="fx-tag">${esc(timeLabel(m.date))}</span>`;
   return (
-    `<div class="mrow ${cls}">` +
-    `<span class="m-home">${esc(m.home.abbr || m.home.name)}${flag(m.home.logo)}</span>` +
-    `<span class="m-mid">${mid}</span>` +
-    `<span class="m-away">${flag(m.away.logo)}${esc(m.away.abbr || m.away.name)}</span>` +
-    `<span class="m-end">${end}</span>` +
+    `<div class="fxrow ${cls}">` +
+    `<span class="fx-home">${flag(m.home.logo)}<span class="fx-code">${esc(m.home.abbr || m.home.name)}</span></span>` +
+    `<span class="fx-mid">${mid}</span>` +
+    `<span class="fx-away"><span class="fx-code">${esc(m.away.abbr || m.away.name)}</span>${flag(m.away.logo)}</span>` +
+    `<span class="fx-end">${tag}</span>` +
     `</div>`
   );
 }
@@ -217,30 +230,39 @@ function timeLabel(iso) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// -- group standings ----------------------------------------------------
+// -- group standings (StandingsTable design) ----------------------------
+function gdClass(gd) {
+  const n = parseInt(String(gd).replace('+', ''), 10);
+  if (!Number.isFinite(n) || n === 0) return '';
+  return n > 0 ? 'pos' : 'neg';
+}
+
 function renderGroup(g, idx, total) {
-  const liveBadge = g.live ? '<span class="live-badge">● LIVE</span>' : '';
+  const head = bcHead(g.name, `${idx + 1}/${total}`);
+  const header =
+    '<div class="strow sthead">' +
+    '<div></div><div class="st-team">Team</div>' +
+    '<div class="st-n">P</div><div class="st-n">W</div><div class="st-n">D</div>' +
+    '<div class="st-n">L</div><div class="st-n">GD</div><div class="st-pts">PTS</div>' +
+    '</div>';
   const rows = (g.teams || [])
     .map((t, i) => {
-      const cls = (i < 2 ? 'adv' : 'out') + (t.live ? ' tlive' : '');
+      const qual = i < 2 ? ' qual' : '';
+      const liveCls = t.live ? ' live' : '';
       return (
-        `<tr class="${cls}">` +
-        `<td class="pos">${i + 1}</td>` +
-        `<td class="tm">${flag(t.logo)}<span>${esc(t.abbr || t.name)}</span></td>` +
-        `<td>${cell(t.p)}</td><td>${cell(t.w)}</td><td>${cell(t.d)}</td><td>${cell(t.l)}</td>` +
-        `<td>${cell(t.gd)}</td><td class="ptsc"><b>${cell(t.pts)}</b></td>` +
-        `</tr>`
+        `<div class="strow${qual}${liveCls}">` +
+        `<div class="st-pos">${i + 1}</div>` +
+        `<div class="st-team">${flag(t.logo)}<span class="st-code">${esc(t.abbr || t.name)}</span>` +
+        `<span class="st-name">${esc(t.name)}</span></div>` +
+        `<div class="st-n">${cell(t.p)}</div><div class="st-n">${cell(t.w)}</div>` +
+        `<div class="st-n">${cell(t.d)}</div><div class="st-n">${cell(t.l)}</div>` +
+        `<div class="st-n st-gd ${gdClass(t.gd)}">${cell(t.gd)}</div>` +
+        `<div class="st-pts">${cell(t.pts)}</div>` +
+        `</div>`
       );
     })
     .join('');
-  return (
-    `<div class="gpanel">` +
-    `<div class="gtitle">${esc(g.name)}${liveBadge}<span class="gcount">${idx + 1}/${total}</span></div>` +
-    `<table class="gtable"><thead><tr>` +
-    `<th></th><th></th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th>` +
-    `</tr></thead><tbody>${rows}</tbody></table>` +
-    `</div>`
-  );
+  return accent() + head + '<div class="stable">' + header + rows + '</div>';
 }
 
 function cell(v) {
