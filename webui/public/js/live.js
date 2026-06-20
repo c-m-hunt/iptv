@@ -189,17 +189,19 @@ function renderMatchRow(m) {
   const mid =
     live || done
       ? `<span class="m-sc">${score(m.home.score)}<i>–</i>${score(m.away.score)}</span>`
-      : `<span class="m-time">${esc(timeLabel(m.date))}</span>`;
-  const tag = live
+      : '<span class="m-vs">v</span>';
+  // The live clock / FT / kickoff time sits after the second team.
+  const end = live
     ? `<span class="m-tag live">${esc(m.clock || 'LIVE')}</span>`
     : done
       ? '<span class="m-tag">FT</span>'
-      : '';
+      : `<span class="m-tag">${esc(timeLabel(m.date))}</span>`;
   return (
     `<div class="mrow ${cls}">` +
     `<span class="m-home">${esc(m.home.abbr || m.home.name)}${flag(m.home.logo)}</span>` +
-    `<span class="m-mid">${mid}${tag}</span>` +
+    `<span class="m-mid">${mid}</span>` +
     `<span class="m-away">${flag(m.away.logo)}${esc(m.away.abbr || m.away.name)}</span>` +
+    `<span class="m-end">${end}</span>` +
     `</div>`
   );
 }
