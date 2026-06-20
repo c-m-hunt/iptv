@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 #
-# winx_find.sh — search the WINXMAC / invictusdedi.com IPTV catalog and
-# print a VLC-playable stream URL.
+# winx_find.sh — search an Xtream Codes IPTV catalogue and print a
+# VLC-playable stream URL.
 #
-# Reads credentials from WINXMAC's localStorage by default. Override with
-# env vars: WINXMAC_USERNAME, WINXMAC_PASSWORD, WINXMAC_LOGIN_URL,
-# WINXMAC_SERVER, WINXMAC_PORT.
+# Configure via env vars (or webui/.env): IPTV_USERNAME, IPTV_PASSWORD,
+# IPTV_LOGIN_URL, IPTV_SERVER, IPTV_PORT. Alternatively point IPTV_LS_DB at a
+# desktop IPTV app's localStorage (file__0.localstorage) to read them from there.
 #
 # Requires: bash 3.2+, curl, jq, sqlite3 (all preinstalled on macOS).
 
 set -euo pipefail
 
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/winxmac"
+# Load local config from webui/.env if present (gitignored).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/webui/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/webui/.env"
+  set +a
+fi
+
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/iptv-find"
 CACHE_TTL=${CACHE_TTL:-21600}   # 6h
 
 OPEN_IN_VLC=0
@@ -90,9 +99,9 @@ CACHE_TSV="$CACHE_DIR/${TYPE}_streams.tsv"
 # -- credentials -------------------------------------------------------------
 U=""; P=""; LOGIN=""; SERVER=""; PORT=""
 
-LS_DB="$HOME/Library/Application Support/WINXMAC/Local Storage/file__0.localstorage"
-if [[ -f "$LS_DB" ]]; then
-  TMP_DB=$(mktemp -t winx-ls.XXXXXX)
+LS_DB="${IPTV_LS_DB:-}"
+if [[ -n "$LS_DB" && -f "$LS_DB" ]]; then
+  TMP_DB=$(mktemp -t iptv-ls.XXXXXX)
   cp "$LS_DB" "$TMP_DB"
   profile=$(sqlite3 "$TMP_DB" "SELECT value FROM ItemTable WHERE key='profile';" 2>/dev/null || true)
   rm -f "$TMP_DB"
@@ -105,14 +114,15 @@ if [[ -f "$LS_DB" ]]; then
   fi
 fi
 
-U="${WINXMAC_USERNAME:-$U}"
-P="${WINXMAC_PASSWORD:-$P}"
-LOGIN="${WINXMAC_LOGIN_URL:-${LOGIN:-http://invictusdedi.com}}"
-SERVER="${WINXMAC_SERVER:-${SERVER:-x1.invictusdedi.com}}"
-PORT="${WINXMAC_PORT:-${PORT:-80}}"
+U="${IPTV_USERNAME:-$U}"
+P="${IPTV_PASSWORD:-$P}"
+LOGIN="${IPTV_LOGIN_URL:-${LOGIN:-}}"
+SERVER="${IPTV_SERVER:-${SERVER:-}}"
+PORT="${IPTV_PORT:-${PORT:-80}}"
 
-if [[ -z "$U" || -z "$P" ]]; then
-  echo "Error: no credentials found in localStorage and WINXMAC_USERNAME/PASSWORD not set." >&2
+if [[ -z "$U" || -z "$P" || -z "$LOGIN" || -z "$SERVER" ]]; then
+  echo "Error: IPTV not configured. Set IPTV_USERNAME/PASSWORD/LOGIN_URL/SERVER" >&2
+  echo "       (or IPTV_LS_DB) — see webui/.env.example." >&2
   exit 1
 fi
 

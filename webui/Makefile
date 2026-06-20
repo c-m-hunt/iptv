@@ -12,8 +12,10 @@ PORT        ?= 8090
 ENV_FILE    ?= .env
 CREDS_COPY  := .iptv-creds.localstorage
 
-# Default macOS IPTV-app localStorage location (override with: make run LS_DB=/path)
-LS_DB ?= $(HOME)/Library/Application Support/WINXMAC/Local Storage/file__0.localstorage
+# Optional: path to a desktop IPTV app's localStorage DB to mount for creds.
+# Leave empty to use .env instead. Example:
+#   make run LS_DB="$HOME/Library/Application Support/<App>/Local Storage/file__0.localstorage"
+LS_DB ?=
 
 .PHONY: dev build run logs stop clean clean-cache help
 
@@ -29,7 +31,7 @@ build:
 run: build
 	@set -e; \
 	ARGS="--rm --name $(IMAGE) -p $(PORT):8080 -v iptv-cache:/cache"; \
-	if [ -f "$(LS_DB)" ]; then \
+	if [ -n "$(LS_DB)" ] && [ -f "$(LS_DB)" ]; then \
 	  cp "$(LS_DB)" "$(CREDS_COPY)"; \
 	  ARGS="$$ARGS -v $(CURDIR)/$(CREDS_COPY):/creds/file__0.localstorage:ro -e IPTV_LS_DB=/creds/file__0.localstorage"; \
 	  echo "-> credentials: mounted localStorage"; \

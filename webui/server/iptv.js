@@ -1,13 +1,11 @@
 // iptv.js — credentials, catalogue fetch/cache, and stream URL building.
-// Ported from winx_find.sh. Live channels only.
+// Xtream Codes compatible. Live channels only.
 //
-// Credential resolution order (highest priority first):
-//   1. IPTV_* environment variables
-//   2. IPTV player app localStorage profile (read via the `sqlite3` CLI)
-//   3. Hardcoded invictusdedi.com defaults
-//
-// The localStorage path is configurable via IPTV_LS_DB so the same code
-// works on a host Mac and inside a container with the file mounted.
+// Credentials come from (highest priority first):
+//   1. IPTV_* environment variables (see .env / .env.example)
+//   2. An optional desktop IPTV app's localStorage profile, when IPTV_LS_DB
+//      points at its `file__0.localstorage` (read via the `sqlite3` CLI)
+// Nothing provider-specific is hardcoded.
 
 const fs = require('fs');
 const os = require('os');
@@ -22,27 +20,19 @@ const CACHE_DIR =
 const CACHE_TTL = Number(process.env.CACHE_TTL || 21600) * 1000; // ms (6h default)
 const CACHE_JSON = path.join(CACHE_DIR, 'live_streams.json');
 
-const DEFAULT_LS_DB =
-  process.env.IPTV_LS_DB ||
-  path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    'WINXMAC',
-    'Local Storage',
-    'file__0.localstorage'
-  );
+// Optional path to a desktop IPTV app's localStorage DB; empty = don't read one.
+const LS_DB = process.env.IPTV_LS_DB || '';
 
 let cachedCreds = null;
 
 // -- credentials ------------------------------------------------------------
 function readProfileFromLocalStorage() {
-  if (!fs.existsSync(DEFAULT_LS_DB)) return null;
+  if (!LS_DB || !fs.existsSync(LS_DB)) return null;
   let tmp;
   try {
     // Copy first: the DB may be locked while the IPTV app is running.
     tmp = path.join(os.tmpdir(), `iptv-ls-${process.pid}-${Date.now()}.localstorage`);
-    fs.copyFileSync(DEFAULT_LS_DB, tmp);
+    fs.copyFileSync(LS_DB, tmp);
     const raw = execFileSync(
       'sqlite3',
       [tmp, "SELECT value FROM ItemTable WHERE key='profile';"],
@@ -78,15 +68,16 @@ function resolveCredentials() {
   const creds = {
     U: process.env.IPTV_USERNAME || fromLs.U || '',
     P: process.env.IPTV_PASSWORD || fromLs.P || '',
-    LOGIN: process.env.IPTV_LOGIN_URL || fromLs.LOGIN || 'http://invictusdedi.com',
-    SERVER: process.env.IPTV_SERVER || fromLs.SERVER || 'x1.invictusdedi.com',
+    LOGIN: process.env.IPTV_LOGIN_URL || fromLs.LOGIN || '',
+    SERVER: process.env.IPTV_SERVER || fromLs.SERVER || '',
     PORT: process.env.IPTV_PORT || fromLs.PORT || '80',
   };
 
-  if (!creds.U || !creds.P) {
+  if (!creds.U || !creds.P || !creds.LOGIN || !creds.SERVER) {
     throw new Error(
-      'No IPTV credentials found. Mount the IPTV app localStorage file ' +
-        '(IPTV_LS_DB) or set IPTV_USERNAME / IPTV_PASSWORD.'
+      'IPTV not configured. Set IPTV_USERNAME, IPTV_PASSWORD, IPTV_LOGIN_URL and ' +
+        'IPTV_SERVER (see .env.example), or point IPTV_LS_DB at a desktop IPTV ' +
+        "app's localStorage."
     );
   }
 
@@ -144,7 +135,7 @@ async function loadCatalogue({ force = false } = {}) {
 }
 
 // Returns [{ id, name }] of live channels whose name contains ALL hint words
-// (case-insensitive AND match, mirroring winx_find.sh).
+// (case-insensitive AND match).
 async function getChannels(query = '', { force = false, limit = 200 } = {}) {
   const catalogue = await loadCatalogue({ force });
   const tokens = String(query).trim().toLowerCase().split(/\s+/).filter(Boolean);

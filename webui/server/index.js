@@ -8,6 +8,7 @@
 //   GET /api/refresh             -> force-refresh catalogue cache
 //   /                            -> static frontend (../public)
 
+require('./env'); // load .env into process.env before anything reads it
 const path = require('path');
 const express = require('express');
 const iptv = require('./iptv');

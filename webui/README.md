@@ -4,8 +4,8 @@ A single-tab web UI for arranging one or two live IPTV players, full-screening
 them, and overlaying **2026 FIFA World Cup** live scores & group standings in the
 empty corners of a diagonal layout.
 
-Built on the same invictusdedi.com IPTV catalogue that `../winx_find.sh`
-uses. Live channels only.
+Works with any **Xtream Codes** compatible IPTV provider. Live channels only.
+Nothing provider-specific is hardcoded — configure it via `.env`.
 
 ```
 webui/
@@ -15,16 +15,25 @@ webui/
   Makefile     build / run / dev helpers
 ```
 
+## Configure
+
+Copy `.env.example` to `.env` (gitignored) and fill in your provider:
+
+```bash
+cd webui
+cp .env.example .env && $EDITOR .env   # IPTV_USERNAME / PASSWORD / LOGIN_URL / SERVER
+```
+
+Alternatively, if you use a desktop IPTV app that stores an Xtream "profile" in
+its localStorage, point `IPTV_LS_DB` at its `file__0.localstorage` and the
+credentials are read from there (via `sqlite3`) — no need to set the others.
+
 ## Quick start (local, no Docker)
 
 ```bash
 cd webui
 make dev          # installs deps, starts on http://localhost:8090
 ```
-
-On a Mac with the IPTV player app installed, credentials are read automatically
-from its localStorage (via `sqlite3`, exactly like `winx_find.sh`). Otherwise set
-`IPTV_USERNAME` / `IPTV_PASSWORD` (see `.env.example`).
 
 ## Run in Docker
 
@@ -36,19 +45,12 @@ make run           # builds the image and starts the container
 
 `make run` resolves credentials in this order:
 
-1. **Mounted creds file** — if the IPTV app's localStorage file exists on the host
-   (default macOS path), it's copied to `.iptv-creds.localstorage` and mounted
-   read-only into the container. Override the path:
+1. **`.env`** — passed to the container via `--env-file .env` (the default).
+2. **Mounted localStorage** — if you pass `LS_DB=/path/to/file__0.localstorage`,
+   it's copied to `.iptv-creds.localstorage` and mounted read-only:
    ```bash
-   make run LS_DB=/some/other/file__0.localstorage
+   make run LS_DB="$HOME/Library/Application Support/<YourApp>/Local Storage/file__0.localstorage"
    ```
-2. **`.env` overrides** — if there's no creds file, `make run` passes `--env-file .env`:
-   ```bash
-   cp .env.example .env && $EDITOR .env
-   make run
-   ```
-
-Environment variables always take precedence over the mounted file.
 
 Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 `make clean-cache` (drops the cached catalogue volume).
