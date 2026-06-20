@@ -507,13 +507,40 @@ body {
   background: rgba(255, 68, 56, 0.09);
 }
 
-/* --- fixtures list --- */
-.fix-list {
-  margin-top: 0.65em;
+/* --- fixtures: Live / Fixtures / Results sections --- */
+.fix-wrap {
+  margin-top: 0.55em;
   display: flex;
   flex-direction: column;
-  gap: 0.4em;
+  gap: 0.55em;
   animation: bc_panelIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.fx-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+.fx-sec-h {
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.fx-sec-h::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.09);
+}
+.fx-sec.live .fx-sec-h {
+  color: #ff8a80;
+}
+.fx-sec.pre .fx-sec-h {
+  color: var(--bc-accent);
 }
 .fxrow {
   display: grid;
@@ -529,8 +556,12 @@ body {
   background: rgba(255, 68, 56, 0.16);
   border-left-color: #ff4438;
 }
+.fxrow.pre {
+  border-left-color: rgba(56, 182, 255, 0.55);
+}
 .fxrow.done {
-  opacity: 0.6;
+  opacity: 0.58;
+  border-left-color: rgba(255, 255, 255, 0.14);
 }
 .fx-home,
 .fx-away {

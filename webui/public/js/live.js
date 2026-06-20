@@ -188,12 +188,30 @@ function flag(url) {
   return url ? `<img class="flag" src="${esc(url)}" alt="" loading="lazy">` : '<span class="flag"></span>';
 }
 
-// -- fixtures list (broadcast theme) ------------------------------------
+// -- fixtures: all of the group's matches, split into Live / Fixtures / Results
 function renderFixtures(group, matches) {
-  const body = matches.length
-    ? '<div class="fix-list">' + matches.map(renderMatchRow).join('') + '</div>'
-    : '<div class="panel-empty">No fixtures</div>';
-  return accent() + bcHead(group.name) + body;
+  if (!matches.length) {
+    return accent() + bcHead(group.name) + '<div class="panel-empty">No fixtures</div>';
+  }
+  const byDate = (a, b) => String(a.date).localeCompare(String(b.date));
+  const live = matches.filter((m) => m.state === 'in').sort(byDate);
+  const fixtures = matches.filter((m) => m.state === 'pre').sort(byDate);
+  const results = matches.filter((m) => m.state === 'post').sort(byDate);
+
+  let body = '';
+  if (live.length) body += fxSection('Live', 'live', live);
+  if (fixtures.length) body += fxSection('Fixtures', 'pre', fixtures);
+  if (results.length) body += fxSection('Results', 'post', results);
+  return accent() + bcHead(group.name) + `<div class="fix-wrap">${body}</div>`;
+}
+
+function fxSection(label, cls, matches) {
+  return (
+    `<div class="fx-sec ${cls}">` +
+    `<div class="fx-sec-h">${esc(label)}</div>` +
+    matches.map(renderMatchRow).join('') +
+    '</div>'
+  );
 }
 
 function renderMatchRow(m) {
@@ -208,7 +226,7 @@ function renderMatchRow(m) {
     ? `<span class="fx-tag live"><span class="fx-dot"></span>${esc(m.clock || 'LIVE')}</span>`
     : done
       ? '<span class="fx-tag">FT</span>'
-      : `<span class="fx-tag">${esc(timeLabel(m.date))}</span>`;
+      : `<span class="fx-tag">${esc(whenLabel(m.date))}</span>`;
   return (
     `<div class="fxrow ${cls}">` +
     `<span class="fx-home">${flag(m.home.logo)}<span class="fx-code">${esc(m.home.abbr || m.home.name)}</span></span>` +
@@ -223,11 +241,13 @@ function score(v) {
   return v === '' || v == null ? '' : esc(String(v));
 }
 
-function timeLabel(iso) {
-  if (!iso) return '';
+// Upcoming matches can be on any day, so show weekday + time.
+function whenLabel(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return '';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const day = d.toLocaleDateString([], { weekday: 'short' });
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `${day} ${time}`;
 }
 
 // -- group standings (StandingsTable design) ----------------------------

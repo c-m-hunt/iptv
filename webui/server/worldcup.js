@@ -5,10 +5,22 @@
 // changes shape or goes away, swap SCOREBOARD_URL / STANDINGS_URL or move to
 // football-data.org (needs a free API key) — see README.
 
-const SCOREBOARD_URL =
+const SCOREBOARD_BASE =
   'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
 const STANDINGS_URL =
   'https://site.api.espn.com/apis/v2/sports/soccer/fifa.world/standings';
+
+// The plain scoreboard only returns "today". Fetch a wide window so we get every
+// group's full set of results, live games and upcoming fixtures.
+function scoreboardUrl() {
+  const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(start.getDate() - 12);
+  const end = new Date(now);
+  end.setDate(end.getDate() + 20);
+  return `${SCOREBOARD_BASE}?dates=${fmt(start)}-${fmt(end)}`;
+}
 
 const TTL_MS = Number(process.env.WORLDCUP_TTL || 30) * 1000; // live data: 30s
 
@@ -149,12 +161,11 @@ function linkMatchesAndGroups(matches, groups) {
   }
 
   for (const m of matches) {
-    const g =
-      teamToGroup.get(norm(m.home.abbr)) ||
-      teamToGroup.get(norm(m.home.name)) ||
-      teamToGroup.get(norm(m.away.abbr)) ||
-      teamToGroup.get(norm(m.away.name));
-    if (g) m.group = g.name;
+    // A group-stage match has BOTH teams in the same group. Anything else
+    // (knockouts with placeholder teams like "3RD"/"RD32") isn't a group match.
+    const hg = teamToGroup.get(norm(m.home.abbr)) || teamToGroup.get(norm(m.home.name));
+    const ag = teamToGroup.get(norm(m.away.abbr)) || teamToGroup.get(norm(m.away.name));
+    m.group = hg && ag && hg === ag ? hg.name : '';
   }
 
   const liveTeams = new Set();
@@ -225,7 +236,7 @@ async function getWorldCup({ force = false } = {}) {
 
   // Fetch both in parallel; degrade gracefully if either fails.
   const [sbRes, stRes] = await Promise.allSettled([
-    fetchJson(SCOREBOARD_URL),
+    fetchJson(scoreboardUrl()),
     fetchJson(STANDINGS_URL),
   ]);
 
