@@ -18,6 +18,7 @@ export class Player {
     this.channel = null; // { id, name }
     this.mp = null;
     this.muted = true;
+    this.volume = 1.0;
 
     this.el = document.createElement('div');
     this.el.className = 'player';
@@ -26,11 +27,23 @@ export class Player {
       <video playsinline muted></video>
       <div class="status"></div>
       <div class="badge"><span class="num">${num}</span><span class="label"></span></div>
+      <div class="vol-overlay">
+        <span class="vol-icon">🔊</span>
+        <input class="vol-slider" type="range" min="0" max="1" step="0.05" value="1">
+      </div>
       <div class="search"></div>`;
 
     this.video = this.el.querySelector('video');
     this.statusEl = this.el.querySelector('.status');
     this.labelEl = this.el.querySelector('.badge .label');
+    this.volSlider = this.el.querySelector('.vol-slider');
+    this.volIcon = this.el.querySelector('.vol-icon');
+
+    this.volSlider.addEventListener('input', (e) => {
+      this.setVolume(parseFloat(e.target.value));
+    });
+    // Prevent slider interactions from bubbling to the player mousedown focus handler.
+    this.volSlider.addEventListener('mousedown', (e) => e.stopPropagation());
 
     this.search = new SearchController(this.el.querySelector('.search'), {
       onSelect: (ch) => {
@@ -259,8 +272,17 @@ export class Player {
     this._applyMute();
   }
 
+  setVolume(v) {
+    this.volume = Math.max(0, Math.min(1, v));
+    this.volSlider.value = String(this.volume);
+    const icon = this.volume === 0 ? '🔇' : this.volume < 0.4 ? '🔈' : this.volume < 0.7 ? '🔉' : '🔊';
+    this.volIcon.textContent = icon;
+    this._applyMute();
+  }
+
   _applyMute() {
     this.video.muted = this.muted;
+    this.video.volume = this.volume;
     // Ensure the element is actually playing (muted autoplay is always allowed;
     // a previous unmute attempt may have left it paused).
     if (this.video.paused) {

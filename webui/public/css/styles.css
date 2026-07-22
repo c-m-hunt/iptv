@@ -116,6 +116,47 @@ body {
   display: flex;
 }
 
+/* --- per-player volume overlay ---------------------------------------- */
+.vol-overlay {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.player:hover .vol-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.player.searching .vol-overlay {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vol-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.vol-slider {
+  width: 80px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
 /* --- per-player search overlay ---------------------------------------- */
 .search {
   position: absolute;

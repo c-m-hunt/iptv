@@ -80,6 +80,16 @@ export function installShortcuts(app) {
         app.beginSavePreset();
         break;
 
+      case '+':
+        e.preventDefault();
+        app.adjustVolume(0.1);
+        break;
+
+      case '-':
+        e.preventDefault();
+        app.adjustVolume(-0.1);
+        break;
+
       case 'Escape':
         if (app.cancelTransient()) e.preventDefault();
         break;

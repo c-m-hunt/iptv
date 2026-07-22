@@ -165,6 +165,11 @@ class App {
     this.players.forEach((p) => p.setShowInfo(this.showInfo));
   }
 
+  adjustVolume(delta) {
+    const p = this.players.find((x) => x.num === this.focusedNum);
+    if (p) p.setVolume(p.volume + delta);
+  }
+
   toggleInfo() {
     this.showInfo = !this.showInfo;
     this._applyInfo();
