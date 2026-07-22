@@ -12,7 +12,6 @@ require('./env'); // load .env into process.env before anything reads it
 const path = require('path');
 const express = require('express');
 const iptv = require('./iptv');
-const worldcup = require('./worldcup');
 
 const PORT = Number(process.env.PORT || 8090);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -41,15 +40,6 @@ app.get('/api/stream/live/:id', (req, res) => {
   const id = String(req.params.id).replace(/[^0-9]/g, '');
   if (!id) return res.status(400).json({ error: 'invalid stream id' });
   iptv.proxyStream(id, req, res);
-});
-
-app.get('/api/worldcup', async (req, res) => {
-  try {
-    const data = await worldcup.getWorldCup({ force: req.query.force === '1' });
-    res.json(data);
-  } catch (err) {
-    res.status(502).json({ error: err.message, matches: [], groups: [] });
-  }
 });
 
 app.get('/api/refresh', async (req, res) => {

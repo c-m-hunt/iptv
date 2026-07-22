@@ -50,12 +50,6 @@ export function installShortcuts(app) {
         app.toggleInfo();
         break;
 
-      case 'l':
-      case 'L':
-        e.preventDefault();
-        app.toggleLive();
-        break;
-
       case 'c':
       case 'C':
         e.preventDefault();

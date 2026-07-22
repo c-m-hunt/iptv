@@ -5,20 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>IPTV Player Grid</title>
     <link rel="icon" href="data:," />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
     <!-- Everything not covered by video is black via CSS on #stage. -->
     <div id="stage" tabindex="0">
-      <!-- player slots, drag handle, and corner panels are injected by JS -->
-      <div id="scores-panel" class="corner-panel hidden" aria-label="Live scores"></div>
-      <div id="standings-panel" class="corner-panel hidden" aria-label="Group standings"></div>
+      <!-- player slots and drag handle are injected by JS -->
       <div id="handle" class="hidden" aria-label="Resize handle"></div>
     </div>
 
@@ -29,9 +21,8 @@
       <button id="btn-remove" class="hidden" title="Remove second player">− Player</button>
       <button id="btn-swap" class="hidden" title="Swap the two screens (X)">⇄ Swap</button>
       <button id="btn-layout" class="hidden" title="Cycle layout (horizontal / diagonals)">Layout: —</button>
-      <button id="btn-live" class="hidden" title="Toggle World Cup data (L)">Live data: off</button>
       <span class="spacer"></span>
-      <span class="hint">F / dbl-click fullscreen · ←/→ resize · D info · 1/2 search · X swap · L live · C pin · +/− volume</span>
+      <span class="hint">F / dbl-click fullscreen · ←/→ resize · D info · 1/2 search · X swap · C pin · +/− volume</span>
     </div>
 
     <div id="presets" aria-label="Presets"></div>
@@ -45,7 +36,6 @@
         <li><b>D</b> — toggle player / channel info overlay</li>
         <li><b>1 / 2</b> — focus a player and (re)open its channel search</li>
         <li><b>X</b> — swap the two screens (big ⇄ small)</li>
-        <li><b>L</b> — toggle World Cup live scores &amp; standings (diagonal only)</li>
         <li><b>C</b> — pin / unpin the control bar (otherwise it auto-hides)</li>
         <li><b>P</b> — presets panel (or move the mouse to the right edge); <b>1–9</b> loads</li>
         <li><b>S</b> then <b>1–9</b> — save the current setup as a preset</li>

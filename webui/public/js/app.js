@@ -1,7 +1,6 @@
 // app.js — application orchestrator: state, layout rendering, controls.
 
 import { Player } from './player.js';
-import { LivePanels } from './live.js';
 import { Presets } from './presets.js';
 import { computeLayout, clampSplit, MODES, MODE_LABELS } from './layout.js';
 import { installShortcuts } from './shortcuts.js';
@@ -12,11 +11,6 @@ class App {
     this.handleEl = document.getElementById('handle');
     this.toolbar = document.getElementById('toolbar');
     this.helpEl = document.getElementById('help');
-
-    this.live = new LivePanels(
-      document.getElementById('scores-panel'),
-      document.getElementById('standings-panel')
-    );
 
     this.toastEl = document.getElementById('toast');
     this.presets = new Presets(document.getElementById('presets'), {
@@ -124,7 +118,7 @@ class App {
 
   render() {
     const mode = this.effectiveMode;
-    const layout = computeLayout(mode, this.split, this.live.isVisible());
+    const layout = computeLayout(mode, this.split);
 
     this.players.forEach((p, i) => {
       const rect = layout.rects[i] || layout.rects[0];
@@ -144,9 +138,6 @@ class App {
     } else {
       this.handleEl.classList.add('hidden');
     }
-
-    // World Cup corner panels (only diagonal modes expose corners)
-    this.live.setCorners(layout.corners);
 
     this._applyFocus();
     this._applyInfo();
@@ -173,13 +164,6 @@ class App {
   toggleInfo() {
     this.showInfo = !this.showInfo;
     this._applyInfo();
-  }
-
-  toggleLive() {
-    this.live.setVisible(!this.live.isVisible());
-    this.render(); // resize the main video to make room for / reclaim from panels
-    this._updateToolbar();
-    this._scheduleSaveLast();
   }
 
   toggleHelp() {
@@ -214,7 +198,6 @@ class App {
     document.getElementById('btn-remove').addEventListener('click', () => this.removePlayer());
     document.getElementById('btn-swap').addEventListener('click', () => this.swapPlayers());
     document.getElementById('btn-layout').addEventListener('click', () => this.cycleLayout());
-    document.getElementById('btn-live').addEventListener('click', () => this.toggleLive());
 
     // First user gesture unlocks audio: unmute the focused player.
     const unlock = () => {
@@ -260,10 +243,6 @@ class App {
     const layoutBtn = document.getElementById('btn-layout');
     layoutBtn.classList.toggle('hidden', !two);
     layoutBtn.textContent = 'Layout: ' + (MODE_LABELS[this.layoutMode] || this.layoutMode);
-
-    const liveBtn = document.getElementById('btn-live');
-    liveBtn.classList.toggle('hidden', !two);
-    liveBtn.textContent = 'Live data: ' + (this.live.isVisible() ? 'on' : 'off');
   }
 
   // Double-click the video to toggle fullscreen — a guaranteed user gesture on
@@ -335,7 +314,6 @@ class App {
       layoutMode: this.layoutMode,
       split: { x: this.split.x, y: this.split.y },
       focusedNum: this.focusedNum,
-      live: this.live.isVisible(),
     };
   }
 
@@ -355,7 +333,6 @@ class App {
     if (s.layoutMode) this.layoutMode = s.layoutMode;
     if (s.split) this.split = clampSplit({ x: s.split.x, y: s.split.y });
     this.focusedNum = Math.min(s.focusedNum || 1, this.players.length);
-    this.live.setVisible(!!s.live);
     this.render();
     if (toast) this.toast('Loaded preset');
   }
