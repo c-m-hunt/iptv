@@ -4,6 +4,7 @@ import { Player } from './player.js';
 import { Presets } from './presets.js';
 import { Profile } from './profile.js';
 import { Films } from './films.js';
+import { WatchHistory } from './history.js';
 import { computeLayout, clampSplit, MODES, MODE_LABELS } from './layout.js';
 import { installShortcuts } from './shortcuts.js';
 
@@ -20,9 +21,14 @@ class App {
       onSaveRequest: (slot) => this.savePresetToSlot(slot),
     });
     this.profile = new Profile(document.getElementById('profile'));
+    this.history = new WatchHistory();
     this.films = new Films(document.getElementById('films'), {
-      onPlay: (film, playback) => this.playMovie(film, playback),
+      history: this.history,
+      onPlay: (film, playback, opts) => this.playMovie(film, playback, opts),
     });
+
+    // A closing tab gets no timeupdate, so flush the resume point on the way out.
+    window.addEventListener('pagehide', () => this.players.forEach((p) => p.saveProgress()));
     this._awaitingSave = false;
     this._lastKey = 'iptv-last-setup-v1';
     this._canUnmute = false; // becomes true after the first user gesture
@@ -61,6 +67,7 @@ class App {
     const player = new Player(num, {
       onSelect: (p) => this.focusPlayer(p.num),
       onFocus: (p) => this.focusPlayer(p.num),
+      onProgress: (info) => this.history.record(info),
     });
     this.players.push(player);
     this.stage.appendChild(player.el);
@@ -323,15 +330,25 @@ class App {
 
   // Films load into the focused player, so a film can sit alongside live TV in
   // the same grid.
-  playMovie(film, playback = {}) {
+  playMovie(film, playback = {}, { startAt = 0 } = {}) {
     const p = this.players.find((x) => x.num === this.focusedNum) || this.players[0];
     if (!p) return;
-    p.setMovie(film, playback);
-    this.toast(
-      playback.mode === 'remux'
-        ? `Remuxing ${film.title || film.name}…`
-        : `Playing ${film.title || film.name}`
-    );
+    p.setMovie(film, playback, { startAt });
+
+    // Record straight away so a film shows up in continue-watching even if it's
+    // abandoned before the first progress report.
+    this.history.record({
+      id: film.id,
+      title: film.title || film.name,
+      poster: film.poster,
+      durationSecs: film.durationSecs,
+      mode: playback.mode,
+      position: startAt,
+    });
+
+    const name = film.title || film.name;
+    if (startAt > 0) this.toast(`Resuming ${name} from ${fmtClock(startAt)}`);
+    else this.toast(playback.mode === 'remux' ? `Remuxing ${name}…` : `Playing ${name}`);
     this._scheduleSaveLast();
   }
 
@@ -370,9 +387,13 @@ class App {
       const same = p.channel && p.channel.id === ch.id && (p.channel.kind || 'live') === (ch.kind || 'live');
       if (same) p.closeSearch();
       else if (ch.kind === 'movie')
+        // Pick the film up where it was left, not at the start — otherwise
+        // restoring a setup would replay from zero and overwrite the very
+        // resume point we saved.
         p.setMovie(
           { id: ch.id, name: ch.name, title: ch.name, durationSecs: ch.durationSecs },
-          { mode: ch.mode }
+          { mode: ch.mode },
+          { startAt: this.history.resumeAt(ch.id) }
         );
       else p.setChannel(ch);
     });
@@ -470,6 +491,14 @@ class App {
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => el.classList.remove('show'), ms);
   }
+}
+
+function fmtClock(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
 
 window.addEventListener('DOMContentLoaded', () => {

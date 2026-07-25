@@ -13,7 +13,8 @@ const MAX_ERROR_RETRIES = 5; // consecutive hard errors before giving up
 const ERROR_RETRY_DELAY = 2000;
 
 export class Player {
-  constructor(num, { onSelect, onFocus }) {
+  constructor(num, { onSelect, onFocus, onProgress }) {
+    this.onProgress = onProgress;
     this.num = num;
     this.channel = null; // { id, name, kind: 'live' | 'movie' }
     this.kind = 'live';
@@ -68,9 +69,15 @@ export class Player {
       this._scrubbing = false;
       this._seekFilm(Number(this.fbSeek.value));
     });
-    this.video.addEventListener('timeupdate', () => this._syncFilmBar());
+    this.video.addEventListener('timeupdate', () => {
+      this._syncFilmBar();
+      this._reportProgress();
+    });
     this.video.addEventListener('play', () => this._syncFilmBar());
-    this.video.addEventListener('pause', () => this._syncFilmBar());
+    this.video.addEventListener('pause', () => {
+      this._syncFilmBar();
+      this._reportProgress(true); // pausing is exactly when to save the point
+    });
 
     this.volSlider.addEventListener('input', (e) => {
       this.setVolume(parseFloat(e.target.value));
@@ -131,6 +138,7 @@ export class Player {
   }
 
   setChannel(channel) {
+    this.saveProgress(); // capture where the outgoing film got to
     this.channel = { ...channel, kind: 'live' };
     this.kind = 'live';
     this._errorCount = 0;
@@ -142,21 +150,26 @@ export class Player {
 
   // Films play through the browser's own MP4 support: `direct` streams the file
   // as-is, `remux` streams it through ffmpeg because the source is MKV or AVI.
-  setMovie(movie, playback = {}) {
+  // `startAt` resumes a part-watched film; the two modes reach the offset by
+  // different routes, so _loadMovie owns that difference.
+  setMovie(movie, playback = {}, { startAt = 0 } = {}) {
+    this.saveProgress(); // ...including when one film replaces another
     this.channel = {
       id: movie.id,
       name: movie.title || movie.name,
       kind: 'movie',
       mode: playback.mode === 'remux' ? 'remux' : 'direct',
       durationSecs: movie.durationSecs || playback.durationSecs || null,
+      poster: movie.poster || '',
     };
     this.kind = 'movie';
     this._errorCount = 0;
     this._stuckReloads = 0;
     this._remuxOffset = 0;
+    this._lastReport = 0;
     this.closeSearch();
     this._updateBadge();
-    this._loadMovie(this.channel.id, 0);
+    this._loadMovie(this.channel.id, startAt);
   }
 
   _loadMovie(id, offset = 0) {
@@ -177,6 +190,22 @@ export class Player {
       ? `/api/stream/movie/${id}/remux?t=${Math.floor(offset)}`
       : `/api/stream/movie/${id}`;
     video.load();
+
+    // A remuxed stream already starts at the offset; a direct one has the whole
+    // file, so seek once the browser knows how long it is.
+    if (!remux && offset > 0) {
+      video.addEventListener(
+        'loadedmetadata',
+        () => {
+          try {
+            video.currentTime = offset;
+          } catch {
+            /* seek unavailable — playback just starts from the beginning */
+          }
+        },
+        { once: true }
+      );
+    }
 
     video.addEventListener(
       'playing',
@@ -231,6 +260,23 @@ export class Player {
 
   _renderFilmTime(pos) {
     this.fbTime.textContent = `${fmtTime(pos)} / ${fmtTime(this._filmDuration())}`;
+  }
+
+  // Report where we are every few seconds so the resume point survives a tab
+  // close. Forced on pause and when the film is swapped out.
+  _reportProgress(force = false) {
+    if (this.kind !== 'movie' || !this.channel || !this.onProgress) return;
+    const now = Date.now();
+    if (!force && now - (this._lastReport || 0) < 5000) return;
+    this._lastReport = now;
+    this.onProgress({
+      id: this.channel.id,
+      title: this.channel.name,
+      poster: this.channel.poster,
+      mode: this.channel.mode,
+      durationSecs: this._filmDuration() || this.channel.durationSecs,
+      position: this._filmPosition(),
+    });
   }
 
   _seekFilm(seconds) {
@@ -454,7 +500,13 @@ export class Player {
     if (numEl) numEl.textContent = String(n);
   }
 
+  // Flush the resume point now, whatever the throttle says.
+  saveProgress() {
+    this._reportProgress(true);
+  }
+
   destroy() {
+    this.saveProgress();
     clearInterval(this._watchdog);
     clearTimeout(this._retryTimer);
     this._destroyMp();

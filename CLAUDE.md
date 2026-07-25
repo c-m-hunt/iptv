@@ -43,6 +43,7 @@ webui/
       presets.js   Presets — save/load setups in localStorage, slide-in panel
       profile.js   Profile — account/subscription panel (expiry, connections)
       films.js     Films — browse/search overlay, detail view, play
+      history.js   WatchHistory — recently played films + resume points
       shortcuts.js Global keyboard handler — delegates to App methods
     css/styles.css Single stylesheet for everything
 ```
@@ -79,6 +80,13 @@ offer a timeline that can't work for a remuxed stream). Runtime comes from
 `get_vod_info`, so the scrub bar spans the whole film from the first frame.
 Every live ffmpeg holds one of the account's limited connections, so the process
 is SIGKILLed as soon as the client disconnects.
+
+**Continue watching**: `Player` reports its position every 5s (and on pause,
+film swap, destroy and `pagehide`) to `WatchHistory`, which keeps the last 30
+films in localStorage. Entries store the playback mode and runtime as well as
+the position, so resuming from the row starts immediately without re-probing the
+container. `applySetup()` restores a film via `history.resumeAt(id)` — restoring
+at 0 would replay from the start and overwrite the saved point.
 
 **Layout**: `computeLayout(mode, split)` in `layout.js` returns `{ rects, handle }` in percent units. Three modes: `horizontal` (side-by-side, vertical drag handle), `diag-tlbr` / `diag-bltr` (large + overlapping inset, point drag handle). `App.render()` calls this and positions players via `applyRect()`.
 

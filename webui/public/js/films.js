@@ -16,9 +16,10 @@ const SORTS = [
 ];
 
 export class Films {
-  constructor(rootEl, { onPlay }) {
+  constructor(rootEl, { onPlay, history }) {
     this.root = rootEl;
     this.onPlay = onPlay;
+    this.history = history;
     this.items = [];
     this.total = 0;
     this.offset = 0;
@@ -37,6 +38,7 @@ export class Films {
         <span class="films-count"></span>
         <button class="films-close" title="Close (M / Esc)">×</button>
       </div>
+      <div class="films-continue"></div>
       <div class="films-grid"></div>
       <div class="films-more"></div>
       <div class="films-detail"></div>`;
@@ -46,6 +48,7 @@ export class Films {
     this.sortEl = this.root.querySelector('.films-sort');
     this.countEl = this.root.querySelector('.films-count');
     this.gridEl = this.root.querySelector('.films-grid');
+    this.continueEl = this.root.querySelector('.films-continue');
     this.moreEl = this.root.querySelector('.films-more');
     this.detailEl = this.root.querySelector('.films-detail');
 
@@ -72,6 +75,7 @@ export class Films {
       if (e.target.closest('.films-more-btn')) this.load({ reset: false });
     });
     this.detailEl.addEventListener('click', (e) => this._onDetailClick(e));
+    this.continueEl.addEventListener('click', (e) => this._onContinueClick(e));
   }
 
   // -- open/close ---------------------------------------------------------
@@ -83,6 +87,7 @@ export class Films {
     this.root.classList.add('open');
     if (!this._catsLoaded) this._loadCategories();
     if (!this.items.length) this.load({ reset: true });
+    this.renderContinue();
     requestAnimationFrame(() => this.searchEl.focus());
   }
 
@@ -122,6 +127,7 @@ export class Films {
       this.offset = 0;
       this.items = [];
       this.gridEl.innerHTML = '';
+      this.renderContinue(); // the row hides itself once a filter is active
     }
     const seq = ++this.seq;
     this.countEl.textContent = 'Loading…';
@@ -163,6 +169,53 @@ export class Films {
     const html = items.map((f) => cardHtml(f)).join('');
     if (append) this.gridEl.insertAdjacentHTML('beforeend', html);
     else this.gridEl.innerHTML = html || '<div class="films-empty">No films matched.</div>';
+  }
+
+  // -- continue watching --------------------------------------------------
+  // Hidden while searching or filtering: the row is a shortcut back to what you
+  // were watching, not a competitor to the results you asked for.
+  renderContinue() {
+    const filtering = !!this.searchEl.value.trim() || !!this.catEl.value;
+    const entries = this.history ? this.history.list() : [];
+    if (filtering || !entries.length) {
+      this.continueEl.innerHTML = '';
+      this.continueEl.classList.remove('open');
+      return;
+    }
+    this.continueEl.classList.add('open');
+    this.continueEl.innerHTML =
+      '<div class="cw-title">Continue watching</div>' +
+      '<div class="cw-row">' +
+      entries.map((e) => continueCard(e)).join('') +
+      '</div>';
+  }
+
+  _onContinueClick(e) {
+    const del = e.target.closest('[data-del]');
+    if (del) {
+      e.stopPropagation();
+      this.history.remove(Number(del.dataset.del));
+      this.renderContinue();
+      return;
+    }
+    const card = e.target.closest('.cw-card');
+    if (!card) return;
+    const entry = this.history.get(Number(card.dataset.id));
+    if (!entry) return;
+    // The entry carries everything playback needs, so resuming skips the
+    // container probe entirely.
+    this.root.classList.remove('open');
+    this.onPlay?.(
+      {
+        id: entry.id,
+        title: entry.title,
+        name: entry.title,
+        poster: entry.poster,
+        durationSecs: entry.durationSecs,
+      },
+      { mode: entry.mode },
+      { startAt: entry.finished ? 0 : entry.position || 0 }
+    );
   }
 
   // -- detail -------------------------------------------------------------
@@ -209,9 +262,18 @@ export class Films {
     // Only 'unsupported' (a non-MP4 file with no ffmpeg on the server) can't be
     // played at all; remuxable films play like any other, just via ffmpeg.
     const canPlay = play.mode === 'direct' || play.mode === 'remux';
-    const playBtn = canPlay
-      ? '<button class="fd-play">▶ Play</button>'
-      : '<button class="fd-play" disabled>▶ Play</button>';
+    const resumeAt = this.history ? this.history.resumeAt(f.id) : 0;
+    let playBtn;
+    if (!canPlay) {
+      playBtn = '<button class="fd-play" disabled>▶ Play</button>';
+    } else if (resumeAt > 0) {
+      playBtn =
+        `<button class="fd-play" data-at="${Math.floor(resumeAt)}">▶ Resume from ${esc(
+          fmtTime(resumeAt)
+        )}</button>` + '<button class="fd-restart" data-at="0">Play from start</button>';
+    } else {
+      playBtn = '<button class="fd-play" data-at="0">▶ Play</button>';
+    }
     const noteClass = play.mode === 'direct' ? 'ok' : play.mode === 'remux' ? 'info' : 'warn';
     const note = `<span class="fd-note ${noteClass}">${esc(
       play.reason || 'not playable in a browser'
@@ -256,12 +318,14 @@ export class Films {
       this.closeDetail();
       return;
     }
-    if (e.target.closest('.fd-play') && this.detail?.info) {
+    const btn = e.target.closest('.fd-play, .fd-restart');
+    if (btn && !btn.disabled && this.detail?.info) {
       const f = this.detail.info;
       const play = this.detail.play || {};
+      const startAt = Number(btn.dataset.at) || 0;
       this.closeDetail();
       this.root.classList.remove('open');
-      this.onPlay?.(f, play);
+      this.onPlay?.(f, play, { startAt });
     }
   }
 }
@@ -269,6 +333,36 @@ export class Films {
 // -- helpers ----------------------------------------------------------------
 function posterUrl(u) {
   return u ? '/api/poster?u=' + encodeURIComponent(u) : '';
+}
+
+function continueCard(e) {
+  const dur = e.durationSecs || 0;
+  const pct = dur ? Math.min(100, Math.round((e.position / dur) * 100)) : 0;
+  const left = dur ? dur - e.position : 0;
+  const sub = e.finished
+    ? 'Watched'
+    : dur
+      ? `${fmtTime(left)} left`
+      : `from ${fmtTime(e.position)}`;
+  return (
+    `<div class="cw-card" data-id="${e.id}" title="${esc(e.title)}">` +
+    (e.poster
+      ? `<img loading="lazy" src="${esc(posterUrl(e.poster))}" alt="" />`
+      : '<div class="film-noart">No artwork</div>') +
+    `<button class="cw-del" data-del="${e.id}" title="Remove from continue watching">×</button>` +
+    `<div class="cw-bar"><span style="width:${e.finished ? 100 : pct}%"></span></div>` +
+    `<div class="film-name">${esc(e.title)}</div>` +
+    `<div class="film-sub">${esc(sub)}</div>` +
+    `</div>`
+  );
+}
+
+function fmtTime(seconds) {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
 
 function cardHtml(f) {

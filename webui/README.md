@@ -67,6 +67,10 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 - **Films** browses the ~21k VOD catalogue by search, category and sort, with
   posters, plot, cast and ratings. Play loads the film into the focused player
   with a seek bar.
+- **Continue watching** remembers where you got to in the last 30 films and
+  offers them as a row at the top of the browser — click one to pick it up, or
+  hover and press **×** to drop it from the list. The detail view offers both
+  *Resume* and *Play from start*.
 
 ### Shortcuts
 
