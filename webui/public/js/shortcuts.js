@@ -68,6 +68,12 @@ export function installShortcuts(app) {
         app.togglePresets();
         break;
 
+      case 'a':
+      case 'A':
+        e.preventDefault();
+        app.toggleProfile();
+        break;
+
       case 's':
       case 'S':
         e.preventDefault();

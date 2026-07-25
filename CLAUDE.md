@@ -39,6 +39,7 @@ webui/
       layout.js    Pure geometry — computes % rects for the 3 layout modes
       search.js    SearchController — debounced channel search overlay per player
       presets.js   Presets — save/load setups in localStorage, slide-in panel
+      profile.js   Profile — account/subscription panel (expiry, connections)
       shortcuts.js Global keyboard handler — delegates to App methods
     css/styles.css Single stylesheet for everything
 ```
@@ -65,4 +66,4 @@ webui/
 
 ### Keyboard shortcuts
 
-`F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `?` help
+`F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `?` help

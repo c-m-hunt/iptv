@@ -4,7 +4,7 @@
 //   GET /api/health              -> { ok, credentials }
 //   GET /api/channels?q=&force=  -> [{ id, name }]  (live channels, AND-matched)
 //   GET /api/stream/live/:id     -> proxied .ts stream (credentials hidden)
-//   GET /api/worldcup?force=     -> { matches, groups, errors, fetchedAt }
+//   GET /api/account?force=      -> { user, server, fetchedAt }  (no password)
 //   GET /api/refresh             -> force-refresh catalogue cache
 //   /                            -> static frontend (../public)
 
@@ -31,6 +31,16 @@ app.get('/api/channels', async (req, res) => {
       limit: Number(req.query.limit || 200),
     });
     res.json(channels);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/account', async (req, res) => {
+  try {
+    const account = await iptv.getAccount({ force: req.query.force === '1' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(account);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -19,6 +19,9 @@ const CACHE_DIR =
   path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'iptv');
 const CACHE_TTL = Number(process.env.CACHE_TTL || 21600) * 1000; // ms (6h default)
 const CACHE_JSON = path.join(CACHE_DIR, 'live_streams.json');
+// Account info is small and `active_cons` moves in real time — cache it briefly
+// in memory only, so it never touches disk.
+const ACCOUNT_TTL = Number(process.env.ACCOUNT_TTL || 15) * 1000; // ms (15s default)
 
 // Optional path to a desktop IPTV app's localStorage DB; empty = don't read one.
 const LS_DB = process.env.IPTV_LS_DB || '';
@@ -152,6 +155,106 @@ async function getChannels(query = '', { force = false, limit = 200 } = {}) {
   return out;
 }
 
+// -- account / subscription -------------------------------------------------
+// The bare player_api.php call (no `action`) is the Xtream auth endpoint: it
+// returns `user_info` + `server_info`. That's what the desktop app's profile
+// page is built from.
+let accountCache = null; // { at, data }
+
+function toNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Reshape into camelCase and — deliberately — drop `user_info.password`, which
+// the provider echoes back in cleartext. It must never reach the browser.
+function shapeAccount(raw) {
+  const u = (raw && raw.user_info) || {};
+  const s = (raw && raw.server_info) || {};
+  return {
+    user: {
+      username: u.username || '',
+      status: u.status || 'Unknown',
+      auth: toNum(u.auth),
+      isTrial: u.is_trial === '1' || u.is_trial === 1,
+      expDate: toNum(u.exp_date), // unix seconds; null = no expiry set
+      createdAt: toNum(u.created_at),
+      maxConnections: toNum(u.max_connections),
+      activeConnections: toNum(u.active_cons),
+      allowedFormats: Array.isArray(u.allowed_output_formats) ? u.allowed_output_formats : [],
+      message: u.message || '',
+    },
+    server: {
+      url: s.url || '',
+      port: s.port || '',
+      httpsPort: s.https_port || '',
+      rtmpPort: s.rtmp_port || '',
+      protocol: s.server_protocol || '',
+      timezone: s.timezone || '',
+      timeNow: s.time_now || '',
+      // Provider's own clock — used to compute "days left" without trusting the
+      // browser's clock or timezone.
+      timestampNow: toNum(s.timestamp_now),
+    },
+    fetchedAt: Date.now(),
+  };
+}
+
+async function fetchAccountOnce() {
+  const { U, P, LOGIN } = resolveCredentials();
+  const url = new URL(`${LOGIN.replace(/\/$/, '')}/player_api.php`);
+  url.searchParams.set('username', U);
+  url.searchParams.set('password', P);
+  // The portal sits behind an HTTP cache that keys on the exact URL: repeat the
+  // same request and it replays a response minutes old, which freezes
+  // `active_cons` at whatever it was and `time_now` with it. A unique param
+  // plus no-cache headers is what actually gets live numbers back.
+  url.searchParams.set('_', `${Date.now()}${Math.random().toString(36).slice(2, 8)}`);
+
+  const resp = await fetch(url, {
+    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    signal: AbortSignal.timeout(15000),
+  });
+  const body = await resp.text();
+  if (!resp.ok) throw new Error(`account fetch failed: HTTP ${resp.status}`);
+
+  let raw;
+  try {
+    raw = JSON.parse(body);
+  } catch {
+    // The portal intermittently answers with a plain-text error ("Got 503
+    // upstream") rather than JSON.
+    throw new Error(`portal unavailable: ${body.trim().slice(0, 60) || 'empty response'}`);
+  }
+  if (!raw.user_info || !raw.user_info.auth) throw new Error('provider rejected the credentials');
+  return shapeAccount(raw);
+}
+
+async function getAccount({ force = false } = {}) {
+  if (!force && accountCache && Date.now() - accountCache.at < ACCOUNT_TTL) {
+    return accountCache.data;
+  }
+
+  // The portal is flaky enough that one 503 shouldn't blank the panel: retry
+  // once, then fall back to the last good answer, flagged as stale.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const data = await fetchAccountOnce();
+      accountCache = { at: Date.now(), data };
+      return data;
+    } catch (err) {
+      if (attempt === 1) {
+        if (accountCache) {
+          console.warn('[iptv] account refresh failed, serving stale:', err.message);
+          return { ...accountCache.data, stale: true };
+        }
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+}
+
 function streamUrl(id) {
   const { U, P, SERVER, PORT } = resolveCredentials();
   return `http://${SERVER}:${PORT}/live/${U}/${P}/${id}.ts`;
@@ -249,6 +352,7 @@ module.exports = {
   hasCredentials,
   resolveCredentials,
   getChannels,
+  getAccount,
   refreshCatalogue,
   streamUrl,
   proxyStream,

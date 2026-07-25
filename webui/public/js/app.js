@@ -2,6 +2,7 @@
 
 import { Player } from './player.js';
 import { Presets } from './presets.js';
+import { Profile } from './profile.js';
 import { computeLayout, clampSplit, MODES, MODE_LABELS } from './layout.js';
 import { installShortcuts } from './shortcuts.js';
 
@@ -17,6 +18,7 @@ class App {
       onLoad: (setup) => this.applySetup(setup),
       onSaveRequest: (slot) => this.savePresetToSlot(slot),
     });
+    this.profile = new Profile(document.getElementById('profile'));
     this._awaitingSave = false;
     this._lastKey = 'iptv-last-setup-v1';
     this._canUnmute = false; // becomes true after the first user gesture
@@ -198,6 +200,7 @@ class App {
     document.getElementById('btn-remove').addEventListener('click', () => this.removePlayer());
     document.getElementById('btn-swap').addEventListener('click', () => this.swapPlayers());
     document.getElementById('btn-layout').addEventListener('click', () => this.cycleLayout());
+    document.getElementById('btn-profile').addEventListener('click', () => this.toggleProfile());
 
     // First user gesture unlocks audio: unmute the focused player.
     const unlock = () => {
@@ -305,6 +308,10 @@ class App {
     this.presets.toggle();
   }
 
+  toggleProfile() {
+    this.profile.toggle();
+  }
+
   // Snapshot of everything a preset restores.
   getSetup() {
     return {
@@ -403,6 +410,10 @@ class App {
     }
     if (this.presets.isOpen()) {
       this.presets.forceClose();
+      did = true;
+    }
+    if (this.profile.isOpen()) {
+      this.profile.forceClose();
       did = true;
     }
     return did;
