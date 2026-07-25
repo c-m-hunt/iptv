@@ -74,6 +74,12 @@ export function installShortcuts(app) {
         app.toggleProfile();
         break;
 
+      case 'm':
+      case 'M':
+        e.preventDefault();
+        app.toggleFilms();
+        break;
+
       case 's':
       case 'S':
         e.preventDefault();

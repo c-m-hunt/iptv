@@ -3,6 +3,7 @@
 import { Player } from './player.js';
 import { Presets } from './presets.js';
 import { Profile } from './profile.js';
+import { Films } from './films.js';
 import { computeLayout, clampSplit, MODES, MODE_LABELS } from './layout.js';
 import { installShortcuts } from './shortcuts.js';
 
@@ -19,6 +20,9 @@ class App {
       onSaveRequest: (slot) => this.savePresetToSlot(slot),
     });
     this.profile = new Profile(document.getElementById('profile'));
+    this.films = new Films(document.getElementById('films'), {
+      onPlay: (film) => this.playMovie(film),
+    });
     this._awaitingSave = false;
     this._lastKey = 'iptv-last-setup-v1';
     this._canUnmute = false; // becomes true after the first user gesture
@@ -201,6 +205,7 @@ class App {
     document.getElementById('btn-swap').addEventListener('click', () => this.swapPlayers());
     document.getElementById('btn-layout').addEventListener('click', () => this.cycleLayout());
     document.getElementById('btn-profile').addEventListener('click', () => this.toggleProfile());
+    document.getElementById('btn-films').addEventListener('click', () => this.toggleFilms());
 
     // First user gesture unlocks audio: unmute the focused player.
     const unlock = () => {
@@ -254,7 +259,7 @@ class App {
   _wireFullscreenGestures() {
     this.stage.addEventListener('dblclick', (e) => {
       // Ignore double-clicks on the search overlay, drag handle, or panels.
-      if (e.target.closest('.search, #handle, .corner-panel')) return;
+      if (e.target.closest('.search, #handle, .corner-panel, #films, #profile, #presets')) return;
       if (this.players.some((p) => p.el.classList.contains('searching'))) return;
       this.toggleFullscreen();
     });
@@ -312,11 +317,25 @@ class App {
     this.profile.toggle();
   }
 
+  toggleFilms() {
+    this.films.toggle();
+  }
+
+  // Films load into the focused player, so a film can sit alongside live TV in
+  // the same grid.
+  playMovie(film) {
+    const p = this.players.find((x) => x.num === this.focusedNum) || this.players[0];
+    if (!p) return;
+    p.setMovie(film);
+    this.toast(`Playing ${film.title || film.name}`);
+    this._scheduleSaveLast();
+  }
+
   // Snapshot of everything a preset restores.
   getSetup() {
     return {
       channels: this.players.map((p) =>
-        p.channel ? { id: p.channel.id, name: p.channel.name } : null
+        p.channel ? { id: p.channel.id, name: p.channel.name, kind: p.channel.kind || 'live' } : null
       ),
       layoutMode: this.layoutMode,
       split: { x: this.split.x, y: this.split.y },
@@ -333,8 +352,10 @@ class App {
     (s.channels || []).forEach((ch, i) => {
       const p = this.players[i];
       if (!p || !ch) return;
-      if (!p.channel || p.channel.id !== ch.id) p.setChannel(ch);
-      else p.closeSearch();
+      const same = p.channel && p.channel.id === ch.id && (p.channel.kind || 'live') === (ch.kind || 'live');
+      if (same) p.closeSearch();
+      else if (ch.kind === 'movie') p.setMovie({ id: ch.id, name: ch.name, title: ch.name });
+      else p.setChannel(ch);
     });
 
     if (s.layoutMode) this.layoutMode = s.layoutMode;
@@ -414,6 +435,10 @@ class App {
     }
     if (this.profile.isOpen()) {
       this.profile.forceClose();
+      did = true;
+    }
+    if (this.films.isOpen()) {
+      this.films.close(); // closes the detail view first, if one is up
       did = true;
     }
     return did;

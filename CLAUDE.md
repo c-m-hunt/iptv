@@ -32,6 +32,7 @@ webui/
   server/          Node/Express (CommonJS)
     index.js       Express routes + static host
     iptv.js        Credentials, catalogue fetch/cache, stream proxy
+    vod.js         Film catalogue: fetch/cache, search, detail, container probe
   public/          Static frontend (ES modules, no bundler)
     js/
       app.js       App class — orchestrates all state, layout, players, controls
@@ -40,6 +41,7 @@ webui/
       search.js    SearchController — debounced channel search overlay per player
       presets.js   Presets — save/load setups in localStorage, slide-in panel
       profile.js   Profile — account/subscription panel (expiry, connections)
+      films.js     Films — browse/search overlay, detail view, play
       shortcuts.js Global keyboard handler — delegates to App methods
     css/styles.css Single stylesheet for everything
 ```
@@ -49,6 +51,18 @@ webui/
 **Stream playback**: browser → `GET /api/stream/live/:id` → server proxies to Xtream provider (follows redirects, hides credentials) → mpegts.js demuxes the MPEG-TS in a Worker.
 
 **Channel search**: `SearchController` debounces calls to `GET /api/channels?q=` → server AND-filters the in-memory catalogue (refreshed every 6h from `player_api.php`).
+
+**Film lookup**: `GET /api/movies` filters the cached VOD catalogue (~21k films,
+refreshed every 6h). The portal's own `&search=` is ignored by the server, and
+there is no year field — the year is parsed out of the title (`"Love (2015)"`),
+with `get_vod_info` supplying a real `releasedate` on the detail view.
+
+**Film playback**: `container_extension` is `"vod"` for every film and means
+nothing; the real files are a mix of MP4, MKV and AVI. `probeMovie()` sniffs the
+first bytes to decide. MP4/H.264 plays natively in `<video>` (seekable — the
+proxy rewrites the portal's malformed `accept-ranges` header). MKV/AVI is
+reported as needing a remux and Play is disabled; video is H.264 throughout, so
+that remux is a container swap rather than a re-encode.
 
 **Layout**: `computeLayout(mode, split)` in `layout.js` returns `{ rects, handle }` in percent units. Three modes: `horizontal` (side-by-side, vertical drag handle), `diag-tlbr` / `diag-bltr` (large + overlapping inset, point drag handle). `App.render()` calls this and positions players via `applyRect()`.
 
@@ -66,4 +80,4 @@ webui/
 
 ### Keyboard shortcuts
 
-`F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `?` help
+`F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `M` films · `?` help

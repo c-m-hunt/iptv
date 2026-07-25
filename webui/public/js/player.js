@@ -15,7 +15,8 @@ const ERROR_RETRY_DELAY = 2000;
 export class Player {
   constructor(num, { onSelect, onFocus }) {
     this.num = num;
-    this.channel = null; // { id, name }
+    this.channel = null; // { id, name, kind: 'live' | 'movie' }
+    this.kind = 'live';
     this.mp = null;
     this.muted = true;
     this.volume = 1.0;
@@ -98,12 +99,60 @@ export class Player {
   }
 
   setChannel(channel) {
-    this.channel = channel;
+    this.channel = { ...channel, kind: 'live' };
+    this.kind = 'live';
     this._errorCount = 0;
     this._stuckReloads = 0;
     this.closeSearch();
     this._updateBadge();
     this._loadStream(channel.id);
+  }
+
+  // Films are MP4 over HTTP with byte ranges, so the browser plays them
+  // natively — no mpegts.js, and native controls give us a seek bar for free.
+  setMovie(movie) {
+    this.channel = { id: movie.id, name: movie.title || movie.name, kind: 'movie' };
+    this.kind = 'movie';
+    this._errorCount = 0;
+    this._stuckReloads = 0;
+    this.closeSearch();
+    this._updateBadge();
+    this._loadMovie(movie.id);
+  }
+
+  _loadMovie(id) {
+    this._destroyMp();
+    this.el.classList.add('is-loading', 'is-movie');
+    this.el.classList.remove('is-error');
+    this.statusEl.textContent = 'Loading film…';
+    this._started = false;
+
+    const video = this.video;
+    video.controls = true;
+    video.src = `/api/stream/movie/${id}`;
+    video.load();
+
+    video.addEventListener(
+      'playing',
+      () => {
+        this.el.classList.remove('is-loading', 'is-error');
+        this.statusEl.textContent = '';
+        this._started = true;
+      },
+      { once: true }
+    );
+    video.addEventListener(
+      'error',
+      () => {
+        if (this.kind !== 'movie') return;
+        this._fail('Could not play this film');
+      },
+      { once: true }
+    );
+
+    const p = video.play();
+    if (p && p.catch) p.catch(() => {}); // autoplay rejection is fine; controls are up
+    this._applyMute();
   }
 
   _updateBadge() {
@@ -112,6 +161,12 @@ export class Player {
 
   _loadStream(streamId) {
     this._destroyMp();
+    // Coming back from a film: drop the native source and controls, or mpegts
+    // would be attaching to an element that's still playing an MP4.
+    this.video.removeAttribute('src');
+    this.video.controls = false;
+    this.video.load();
+    this.el.classList.remove('is-movie');
     this.el.classList.add('is-loading');
     this.el.classList.remove('is-error');
     this.statusEl.textContent = 'Loading…';
@@ -176,6 +231,9 @@ export class Player {
   // Watchdog: a live stream that freezes often emits no error — currentTime
   // just stops advancing. Detect that and restart the stream.
   _tick() {
+    // Films are on-demand: pausing and seeking are normal, and a restart would
+    // throw the viewer back to the start. The watchdog is for live only.
+    if (this.kind === 'movie') return;
     if (!this.channel || !this.mp) return;
     const v = this.video;
     const now = Date.now();
@@ -284,8 +342,9 @@ export class Player {
     this.video.muted = this.muted;
     this.video.volume = this.volume;
     // Ensure the element is actually playing (muted autoplay is always allowed;
-    // a previous unmute attempt may have left it paused).
-    if (this.video.paused) {
+    // a previous unmute attempt may have left it paused). Never for a film —
+    // the viewer may have paused it deliberately.
+    if (this.video.paused && this.kind !== 'movie') {
       const p = this.video.play?.();
       if (p && p.catch) p.catch(() => {});
     }

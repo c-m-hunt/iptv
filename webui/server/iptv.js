@@ -97,6 +97,18 @@ function hasCredentials() {
   }
 }
 
+// Build a player_api.php URL with credentials applied. Shared with vod.js so
+// there's one place that knows how the portal is addressed.
+function apiUrl(action = '', params = {}) {
+  const { U, P, LOGIN } = resolveCredentials();
+  const url = new URL(`${LOGIN.replace(/\/$/, '')}/player_api.php`);
+  url.searchParams.set('username', U);
+  url.searchParams.set('password', P);
+  if (action) url.searchParams.set('action', action);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
+  return url;
+}
+
 // -- catalogue --------------------------------------------------------------
 function cacheAgeMs(file) {
   try {
@@ -273,7 +285,12 @@ function proxyStream(id, clientReq, clientRes) {
     clientRes.status(500).json({ error: err.message });
     return;
   }
+  proxyFrom(startUrl, clientReq, clientRes);
+}
 
+// Pipe an arbitrary upstream media URL to the client. Used for live streams and
+// for films, which live at a different path but behave the same way.
+function proxyFrom(startUrl, clientReq, clientRes) {
   // Xtream servers 302-redirect to a token-authenticated edge node (often a
   // different host/port, sometimes https). Follow the chain, then pipe the
   // final 200/206 to the browser.
@@ -327,8 +344,15 @@ function proxyStream(id, clientReq, clientRes) {
         const ct = up.headers['content-type'] || '';
         clientRes.setHeader('Content-Type', ct.startsWith('video') ? ct : 'video/mp2t');
         clientRes.setHeader('Cache-Control', 'no-store');
-        for (const h of ['content-length', 'content-range', 'accept-ranges']) {
+        for (const h of ['content-length', 'content-range']) {
           if (up.headers[h]) clientRes.setHeader(h, up.headers[h]);
+        }
+        // The portal answers with a non-standard `accept-ranges: 0-1168479440`
+        // (a byte count, where the spec wants a unit). Browsers read that as
+        // "ranges unsupported" and disable seeking, so normalise it — the
+        // server does honour ranges, as the 206 + content-range prove.
+        if (up.headers['accept-ranges'] || up.headers['content-range']) {
+          clientRes.setHeader('Accept-Ranges', 'bytes');
         }
       }
       up.on('error', () => clientRes.end());
@@ -351,6 +375,8 @@ module.exports = {
   CACHE_DIR,
   hasCredentials,
   resolveCredentials,
+  apiUrl,
+  proxyFrom,
   getChannels,
   getAccount,
   refreshCatalogue,

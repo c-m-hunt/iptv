@@ -64,6 +64,9 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 - Drag the handle between players to change proportions.
 - **Profile** shows the subscription: expiry date and days left, connections in
   use, and portal details.
+- **Films** browses the ~21k VOD catalogue by search, category and sort, with
+  posters, plot, cast and ratings. Play loads the film into the focused player
+  with a seek bar.
 
 ### Shortcuts
 
@@ -74,6 +77,7 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 | `D` | Toggle player # / channel info overlay |
 | `1` / `2` | Focus a player and (re)open its channel search |
 | `A` | Toggle the profile panel (subscription / expiry) |
+| `M` | Toggle the film browser |
 | `?` | Toggle the help panel |
 
 Only the **focused** player plays audio (click a player or press its number to
@@ -87,6 +91,12 @@ switch). Anything not covered by a video is black.
   `/api/stream/live/:id` so credentials stay server-side and CORS is avoided.
 - **Catalogue**: fetched from the Xtream `player_api.php` endpoint and cached for
   6h under `~/.cache/iptv` (override with `CACHE_DIR`).
+- **Films**: the catalogue (~21k) is cached like the live one. The portal has no
+  working search (`&search=` returns everything) and no year field — the year is
+  parsed from the title, and `get_vod_info` provides the real release date on the
+  detail view. `container_extension` is `"vod"` for every film regardless of what
+  the file actually is, so the first bytes are sniffed to tell MP4 from MKV/AVI.
+  MP4/H.264 plays natively and seeks; the rest is flagged as needing a remux.
 - **Account / profile**: the bare `player_api.php` call (no `action`) is the
   Xtream auth endpoint and returns `user_info` + `server_info` — expiry,
   connection limits, portal details. The server strips the password the provider
@@ -101,4 +111,10 @@ switch). Anything not covered by a video is black.
 | `GET /api/channels?q=sky+sports` | Live channels matching ALL words: `[{ id, name }]` |
 | `GET /api/stream/live/:id` | Proxied `.ts` live stream |
 | `GET /api/account` | `{ user, server, fetchedAt }` — subscription info, never the password |
+| `GET /api/movies?q=&category=&sort=` | `{ total, items }` — film catalogue search |
+| `GET /api/movies/categories` | `[{ id, name, count }]` |
+| `GET /api/movies/:id` | Full film metadata (plot, cast, genre, year…) |
+| `GET /api/movies/:id/playback` | `{ container, playable, reason, size }` |
+| `GET /api/stream/movie/:id` | Proxied film, byte-range capable |
+| `GET /api/poster?u=` | Proxied poster image |
 | `GET /api/refresh` | Force-refresh the catalogue cache |
