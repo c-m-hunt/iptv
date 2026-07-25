@@ -33,6 +33,7 @@ webui/
     index.js       Express routes + static host
     iptv.js        Credentials, catalogue fetch/cache, stream proxy
     vod.js         Film catalogue: fetch/cache, search, detail, container probe
+    remux.js       ffmpeg container swap for MKV/AVI films (fMP4 on stdout)
   public/          Static frontend (ES modules, no bundler)
     js/
       app.js       App class — orchestrates all state, layout, players, controls
@@ -59,10 +60,25 @@ with `get_vod_info` supplying a real `releasedate` on the detail view.
 
 **Film playback**: `container_extension` is `"vod"` for every film and means
 nothing; the real files are a mix of MP4, MKV and AVI. `probeMovie()` sniffs the
-first bytes to decide. MP4/H.264 plays natively in `<video>` (seekable — the
-proxy rewrites the portal's malformed `accept-ranges` header). MKV/AVI is
-reported as needing a remux and Play is disabled; video is H.264 throughout, so
-that remux is a container swap rather than a re-encode.
+first bytes and returns a `mode`:
+
+| `mode` | Meaning |
+|---|---|
+| `direct` | MP4/H.264 — streamed as-is, seekable by byte range |
+| `remux` | MKV/AVI — piped through ffmpeg (`server/remux.js`) |
+| `unsupported` | Not MP4 and no ffmpeg on the server |
+
+Video is H.264 across the catalogue, so a remux copies the video stream and only
+re-encodes audio when it isn't already AAC (AC3/EAC3 → AAC stereo). Output is
+fragmented MP4 on ffmpeg's stdout, ~100x realtime.
+
+**Film seeking**: a piped fMP4 has no byte ranges, so remuxed films seek by
+restarting ffmpeg at `?t=<seconds>` and offsetting the displayed position by it.
+Both modes share one `.film-bar` transport in `player.js` (native controls would
+offer a timeline that can't work for a remuxed stream). Runtime comes from
+`get_vod_info`, so the scrub bar spans the whole film from the first frame.
+Every live ffmpeg holds one of the account's limited connections, so the process
+is SIGKILLed as soon as the client disconnects.
 
 **Layout**: `computeLayout(mode, split)` in `layout.js` returns `{ rects, handle }` in percent units. Three modes: `horizontal` (side-by-side, vertical drag handle), `diag-tlbr` / `diag-bltr` (large + overlapping inset, point drag handle). `App.render()` calls this and positions players via `applyRect()`.
 

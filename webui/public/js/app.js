@@ -21,7 +21,7 @@ class App {
     });
     this.profile = new Profile(document.getElementById('profile'));
     this.films = new Films(document.getElementById('films'), {
-      onPlay: (film) => this.playMovie(film),
+      onPlay: (film, playback) => this.playMovie(film, playback),
     });
     this._awaitingSave = false;
     this._lastKey = 'iptv-last-setup-v1';
@@ -323,11 +323,15 @@ class App {
 
   // Films load into the focused player, so a film can sit alongside live TV in
   // the same grid.
-  playMovie(film) {
+  playMovie(film, playback = {}) {
     const p = this.players.find((x) => x.num === this.focusedNum) || this.players[0];
     if (!p) return;
-    p.setMovie(film);
-    this.toast(`Playing ${film.title || film.name}`);
+    p.setMovie(film, playback);
+    this.toast(
+      playback.mode === 'remux'
+        ? `Remuxing ${film.title || film.name}…`
+        : `Playing ${film.title || film.name}`
+    );
     this._scheduleSaveLast();
   }
 
@@ -335,7 +339,18 @@ class App {
   getSetup() {
     return {
       channels: this.players.map((p) =>
-        p.channel ? { id: p.channel.id, name: p.channel.name, kind: p.channel.kind || 'live' } : null
+        p.channel
+          ? {
+              id: p.channel.id,
+              name: p.channel.name,
+              kind: p.channel.kind || 'live',
+              // Films remember how they were played so a restored setup doesn't
+              // have to re-probe the container before it can start.
+              ...(p.channel.kind === 'movie'
+                ? { mode: p.channel.mode, durationSecs: p.channel.durationSecs }
+                : {}),
+            }
+          : null
       ),
       layoutMode: this.layoutMode,
       split: { x: this.split.x, y: this.split.y },
@@ -354,7 +369,11 @@ class App {
       if (!p || !ch) return;
       const same = p.channel && p.channel.id === ch.id && (p.channel.kind || 'live') === (ch.kind || 'live');
       if (same) p.closeSearch();
-      else if (ch.kind === 'movie') p.setMovie({ id: ch.id, name: ch.name, title: ch.name });
+      else if (ch.kind === 'movie')
+        p.setMovie(
+          { id: ch.id, name: ch.name, title: ch.name, durationSecs: ch.durationSecs },
+          { mode: ch.mode }
+        );
       else p.setChannel(ch);
     });
 

@@ -278,18 +278,29 @@ async function probeMovie(id, { force = false } = {}) {
   const container = detectContainer(buf);
   const hevc = /hvc1|hev1|V_MPEGH\/ISO\/HEVC/.test(head);
 
-  // MP4/H.264 plays natively. Everything else needs a remux before a browser
-  // will touch it — video is H.264 throughout the catalogue, so that remux is
-  // a container swap rather than a re-encode.
-  let playable = container === 'mp4' && !hevc;
+  // MP4/H.264 plays natively; anything else goes through ffmpeg, which swaps
+  // the container without re-encoding the video.
+  const direct = container === 'mp4' && !hevc;
   let reason = '';
-  if (container !== 'mp4') reason = `${container.toUpperCase()} container — needs remux to play in a browser`;
-  else if (hevc) reason = 'HEVC video — plays in Safari, not reliably in Chrome';
+  if (direct) reason = 'MP4 · plays natively';
+  else if (container === 'mp4' && hevc) reason = 'HEVC video — remuxed for playback';
+  else if (container === 'unknown') reason = 'unrecognised file — attempting remux';
+  else reason = `${container.toUpperCase()} · remuxed on the fly`;
 
   const sizeHeader = resp.headers.get('content-range') || '';
   const size = Number(sizeHeader.split('/')[1]) || null;
 
-  const data = { id: Number(key), container, hevc, playable, reason, size };
+  const data = {
+    id: Number(key),
+    container,
+    hevc,
+    direct,
+    mode: direct ? 'direct' : 'remux',
+    // Kept for older callers; `mode` is what the player switches on.
+    playable: direct,
+    reason,
+    size,
+  };
   if (probeCache.size >= 1000) probeCache.delete(probeCache.keys().next().value);
   probeCache.set(key, { at: Date.now(), data });
   return data;

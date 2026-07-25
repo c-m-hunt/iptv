@@ -96,7 +96,11 @@ switch). Anything not covered by a video is black.
   parsed from the title, and `get_vod_info` provides the real release date on the
   detail view. `container_extension` is `"vod"` for every film regardless of what
   the file actually is, so the first bytes are sniffed to tell MP4 from MKV/AVI.
-  MP4/H.264 plays natively and seeks; the rest is flagged as needing a remux.
+  MP4/H.264 plays natively and seeks by byte range; MKV and AVI are remuxed
+  through ffmpeg on the fly (video copied, audio converted only if it isn't
+  AAC). Remuxed films seek by restarting the stream at an offset, so both cases
+  get a working scrub bar. Without ffmpeg installed the app still runs — the
+  non-MP4 films just say so instead of offering Play.
 - **Account / profile**: the bare `player_api.php` call (no `action`) is the
   Xtream auth endpoint and returns `user_info` + `server_info` — expiry,
   connection limits, portal details. The server strips the password the provider
@@ -114,7 +118,8 @@ switch). Anything not covered by a video is black.
 | `GET /api/movies?q=&category=&sort=` | `{ total, items }` — film catalogue search |
 | `GET /api/movies/categories` | `[{ id, name, count }]` |
 | `GET /api/movies/:id` | Full film metadata (plot, cast, genre, year…) |
-| `GET /api/movies/:id/playback` | `{ container, playable, reason, size }` |
+| `GET /api/movies/:id/playback` | `{ container, mode, reason, size, ffmpeg }` — `mode` is `direct`, `remux` or `unsupported` |
 | `GET /api/stream/movie/:id` | Proxied film, byte-range capable |
+| `GET /api/stream/movie/:id/remux?t=` | MKV/AVI remuxed to fMP4, starting at `t` seconds |
 | `GET /api/poster?u=` | Proxied poster image |
 | `GET /api/refresh` | Force-refresh the catalogue cache |

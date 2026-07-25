@@ -3,7 +3,9 @@ FROM node:20-alpine
 
 # `sqlite` provides the sqlite3 CLI used to read a mounted IPTV-app
 # localStorage file (when credentials aren't supplied via env vars).
-RUN apk add --no-cache sqlite
+# `ffmpeg` remuxes the MKV/AVI films browsers can't open. Without it the app
+# still runs, but roughly half the film catalogue becomes browse-only.
+RUN apk add --no-cache sqlite ffmpeg
 
 WORKDIR /app
 

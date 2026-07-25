@@ -1048,9 +1048,62 @@ body {
   color: #fbbf24;
 }
 
-/* A film shows native controls, so keep the volume overlay out of the way. */
-.player.is-movie .vol-overlay {
+/* film transport bar (both direct and remuxed films) */
+.film-bar {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.player.is-movie .film-bar {
+  display: flex;
+}
+
+.player.is-movie:hover .film-bar,
+.player.is-movie.focused .film-bar {
+  opacity: 1;
+}
+
+.fb-play {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--panel-border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.fb-play:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.fb-seek {
+  flex: 1 1 auto;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.fb-time {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.fd-note.info {
+  color: var(--accent);
 }
 
 @media (max-width: 640px) {

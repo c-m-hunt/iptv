@@ -10,6 +10,7 @@
 //   GET /api/movies/:id          -> full film metadata
 //   GET /api/movies/:id/playback -> { container, playable, reason, size }
 //   GET /api/stream/movie/:id    -> proxied film (byte-range capable)
+//   GET /api/stream/movie/:id/remux?t= -> MKV/AVI remuxed to fMP4 via ffmpeg
 //   GET /api/poster?u=           -> proxied poster image
 //   GET /api/refresh             -> force-refresh catalogue cache
 //   /                            -> static frontend (../public)
@@ -19,6 +20,7 @@ const path = require('path');
 const express = require('express');
 const iptv = require('./iptv');
 const vod = require('./vod');
+const remux = require('./remux');
 
 const PORT = Number(process.env.PORT || 8090);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -99,9 +101,35 @@ app.get('/api/movies/:id(\\d+)', async (req, res) => {
 
 app.get('/api/movies/:id(\\d+)/playback', async (req, res) => {
   try {
-    res.json(await vod.probeMovie(req.params.id));
+    const probe = await vod.probeMovie(req.params.id);
+    const ffmpeg = await remux.available();
+    // Without ffmpeg the non-MP4 half of the catalogue simply can't be played,
+    // and the UI should say so rather than offering a button that fails.
+    if (probe.mode === 'remux' && !ffmpeg) {
+      res.json({
+        ...probe,
+        mode: 'unsupported',
+        reason: `${probe.container.toUpperCase()} — needs ffmpeg on the server`,
+        ffmpeg,
+      });
+      return;
+    }
+    res.json({ ...probe, ffmpeg });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Container swap on the fly for films a browser can't open directly. `t` is a
+// start offset in seconds: the player restarts the stream here when seeking,
+// since a piped fMP4 has no byte ranges to seek within.
+app.get('/api/stream/movie/:id(\\d+)/remux', async (req, res) => {
+  const start = Math.max(0, Number(req.query.t) || 0);
+  try {
+    await remux.stream(vod.movieUrl(req.params.id), { start }, req, res);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    else res.end();
   }
 });
 
@@ -151,8 +179,9 @@ app.get('/api/refresh', async (req, res) => {
 
 app.use(express.static(PUBLIC_DIR));
 
-app.listen(PORT, HOST, () => {
+app.listen(PORT, HOST, async () => {
   console.log(`iptv player-grid listening on http://localhost:${PORT}`);
   console.log(`  credentials: ${iptv.hasCredentials() ? 'OK' : 'MISSING'}`);
   console.log(`  cache dir:   ${iptv.CACHE_DIR}`);
+  console.log(`  ffmpeg:      ${(await remux.available()) ? 'OK (MKV/AVI films playable)' : 'MISSING (MP4 films only)'}`);
 });

@@ -206,12 +206,16 @@ export class Films {
       .filter(Boolean)
       .join(' · ');
 
-    const playBtn = play.playable
+    // Only 'unsupported' (a non-MP4 file with no ffmpeg on the server) can't be
+    // played at all; remuxable films play like any other, just via ffmpeg.
+    const canPlay = play.mode === 'direct' || play.mode === 'remux';
+    const playBtn = canPlay
       ? '<button class="fd-play">▶ Play</button>'
       : '<button class="fd-play" disabled>▶ Play</button>';
-    const note = play.playable
-      ? `<span class="fd-note ok">${esc((play.container || '').toUpperCase())} · plays natively</span>`
-      : `<span class="fd-note warn">${esc(play.reason || 'not playable in a browser')}</span>`;
+    const noteClass = play.mode === 'direct' ? 'ok' : play.mode === 'remux' ? 'info' : 'warn';
+    const note = `<span class="fd-note ${noteClass}">${esc(
+      play.reason || 'not playable in a browser'
+    )}</span>`;
 
     this.detailEl.innerHTML = `
       <div class="fd-card">
@@ -254,9 +258,10 @@ export class Films {
     }
     if (e.target.closest('.fd-play') && this.detail?.info) {
       const f = this.detail.info;
+      const play = this.detail.play || {};
       this.closeDetail();
       this.root.classList.remove('open');
-      this.onPlay?.(f);
+      this.onPlay?.(f, play);
     }
   }
 }

@@ -32,6 +32,11 @@ export class Player {
         <span class="vol-icon">🔊</span>
         <input class="vol-slider" type="range" min="0" max="1" step="0.05" value="1">
       </div>
+      <div class="film-bar">
+        <button class="fb-play" title="Play / pause">⏸</button>
+        <input class="fb-seek" type="range" min="0" max="1000" step="1" value="0" />
+        <span class="fb-time">0:00 / 0:00</span>
+      </div>
       <div class="search"></div>`;
 
     this.video = this.el.querySelector('video');
@@ -39,6 +44,33 @@ export class Player {
     this.labelEl = this.el.querySelector('.badge .label');
     this.volSlider = this.el.querySelector('.vol-slider');
     this.volIcon = this.el.querySelector('.vol-icon');
+    this.fbPlay = this.el.querySelector('.fb-play');
+    this.fbSeek = this.el.querySelector('.fb-seek');
+    this.fbTime = this.el.querySelector('.fb-time');
+
+    // Film transport. Remuxed films have no seekable timeline of their own —
+    // seeking restarts the ffmpeg stream at an offset — so both film modes get
+    // the same bar rather than native controls that would behave differently.
+    this._remuxOffset = 0;
+    this._scrubbing = false;
+    this.fbPlay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.video.paused) this.video.play()?.catch(() => {});
+      else this.video.pause();
+      this._syncFilmBar();
+    });
+    this.fbSeek.addEventListener('mousedown', (e) => e.stopPropagation());
+    this.fbSeek.addEventListener('input', () => {
+      this._scrubbing = true;
+      this._renderFilmTime(Number(this.fbSeek.value));
+    });
+    this.fbSeek.addEventListener('change', () => {
+      this._scrubbing = false;
+      this._seekFilm(Number(this.fbSeek.value));
+    });
+    this.video.addEventListener('timeupdate', () => this._syncFilmBar());
+    this.video.addEventListener('play', () => this._syncFilmBar());
+    this.video.addEventListener('pause', () => this._syncFilmBar());
 
     this.volSlider.addEventListener('input', (e) => {
       this.setVolume(parseFloat(e.target.value));
@@ -108,28 +140,42 @@ export class Player {
     this._loadStream(channel.id);
   }
 
-  // Films are MP4 over HTTP with byte ranges, so the browser plays them
-  // natively — no mpegts.js, and native controls give us a seek bar for free.
-  setMovie(movie) {
-    this.channel = { id: movie.id, name: movie.title || movie.name, kind: 'movie' };
+  // Films play through the browser's own MP4 support: `direct` streams the file
+  // as-is, `remux` streams it through ffmpeg because the source is MKV or AVI.
+  setMovie(movie, playback = {}) {
+    this.channel = {
+      id: movie.id,
+      name: movie.title || movie.name,
+      kind: 'movie',
+      mode: playback.mode === 'remux' ? 'remux' : 'direct',
+      durationSecs: movie.durationSecs || playback.durationSecs || null,
+    };
     this.kind = 'movie';
     this._errorCount = 0;
     this._stuckReloads = 0;
+    this._remuxOffset = 0;
     this.closeSearch();
     this._updateBadge();
-    this._loadMovie(movie.id);
+    this._loadMovie(this.channel.id, 0);
   }
 
-  _loadMovie(id) {
+  _loadMovie(id, offset = 0) {
     this._destroyMp();
+    this._remuxOffset = offset;
+    const remux = this.channel?.mode === 'remux';
     this.el.classList.add('is-loading', 'is-movie');
+    this.el.classList.toggle('is-remux', remux);
     this.el.classList.remove('is-error');
-    this.statusEl.textContent = 'Loading film…';
+    this.statusEl.textContent = remux ? 'Remuxing…' : 'Loading film…';
     this._started = false;
 
     const video = this.video;
-    video.controls = true;
-    video.src = `/api/stream/movie/${id}`;
+    // Our own bar drives both modes; native controls would offer a timeline
+    // that can't work for a remuxed stream.
+    video.controls = false;
+    video.src = remux
+      ? `/api/stream/movie/${id}/remux?t=${Math.floor(offset)}`
+      : `/api/stream/movie/${id}`;
     video.load();
 
     video.addEventListener(
@@ -153,6 +199,51 @@ export class Player {
     const p = video.play();
     if (p && p.catch) p.catch(() => {}); // autoplay rejection is fine; controls are up
     this._applyMute();
+    this._syncFilmBar();
+  }
+
+  // -- film transport ------------------------------------------------------
+  // Total runtime comes from the film's metadata; for a direct stream the
+  // element's own duration is better, but a remuxed stream doesn't have one.
+  _filmDuration() {
+    const v = this.video;
+    if (this.channel?.mode !== 'remux' && Number.isFinite(v.duration) && v.duration > 0) {
+      return v.duration;
+    }
+    return this.channel?.durationSecs || 0;
+  }
+
+  _filmPosition() {
+    const t = this.video.currentTime || 0;
+    return this.channel?.mode === 'remux' ? this._remuxOffset + t : t;
+  }
+
+  _syncFilmBar() {
+    if (this.kind !== 'movie') return;
+    this.fbPlay.textContent = this.video.paused ? '▶' : '⏸';
+    if (this._scrubbing) return;
+    const dur = this._filmDuration();
+    const pos = this._filmPosition();
+    this.fbSeek.max = String(Math.max(1, Math.floor(dur)));
+    this.fbSeek.value = String(Math.floor(pos));
+    this._renderFilmTime(pos);
+  }
+
+  _renderFilmTime(pos) {
+    this.fbTime.textContent = `${fmtTime(pos)} / ${fmtTime(this._filmDuration())}`;
+  }
+
+  _seekFilm(seconds) {
+    if (this.kind !== 'movie') return;
+    const dur = this._filmDuration();
+    const target = Math.max(0, Math.min(seconds, dur ? dur - 1 : seconds));
+    if (this.channel.mode === 'remux') {
+      // No byte ranges to seek within — restart ffmpeg at the new offset. The
+      // old process dies when the browser drops the previous request.
+      this._loadMovie(this.channel.id, target);
+    } else {
+      this.video.currentTime = target;
+    }
   }
 
   _updateBadge() {
@@ -166,7 +257,7 @@ export class Player {
     this.video.removeAttribute('src');
     this.video.controls = false;
     this.video.load();
-    this.el.classList.remove('is-movie');
+    this.el.classList.remove('is-movie', 'is-remux');
     this.el.classList.add('is-loading');
     this.el.classList.remove('is-error');
     this.statusEl.textContent = 'Loading…';
@@ -369,4 +460,12 @@ export class Player {
     this._destroyMp();
     this.el.remove();
   }
+}
+
+function fmtTime(seconds) {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
