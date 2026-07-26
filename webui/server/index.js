@@ -11,6 +11,11 @@
 //   GET /api/movies/:id/playback -> { container, playable, reason, size }
 //   GET /api/stream/movie/:id    -> proxied film (byte-range capable)
 //   GET /api/stream/movie/:id/remux?t= -> MKV/AVI remuxed to fMP4 via ffmpeg
+//   GET /api/series?q=&category= -> { total, items }  (series catalogue)
+//   GET /api/series/categories   -> [{ id, name, count }]
+//   GET /api/series/:id          -> show metadata + seasons/episodes
+//   GET /api/episodes/:id/playback -> { container, mode, reason, ... }
+//   GET /api/stream/episode/:id[/remux?t=] -> proxied / remuxed episode
 //   GET /api/catchup/channels    -> archive-capable channels
 //   GET /api/catchup/:id/epg     -> programmes still inside the archive window
 //   GET /api/stream/catchup/:id?start=&duration= -> proxied archive stream
@@ -25,6 +30,7 @@ const iptv = require('./iptv');
 const vod = require('./vod');
 const remux = require('./remux');
 const catchup = require('./catchup');
+const series = require('./series');
 
 const PORT = Number(process.env.PORT || 8090);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -142,6 +148,79 @@ app.get('/api/stream/movie/:id(\\d+)', (req, res) => {
     iptv.proxyFrom(vod.movieUrl(req.params.id, req.query.ext || 'vod'), req, res);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// -- series -----------------------------------------------------------------
+app.get('/api/series/categories', async (req, res) => {
+  try {
+    res.json(await series.getCategories({ force: req.query.force === '1' }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/series', async (req, res) => {
+  try {
+    res.json(
+      await series.searchSeries({
+        q: req.query.q || '',
+        category: req.query.category || '',
+        sort: req.query.sort || 'added',
+        limit: Math.min(Number(req.query.limit) || 60, 200),
+        offset: Number(req.query.offset) || 0,
+        force: req.query.force === '1',
+      })
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/series/:id(\\d+)', async (req, res) => {
+  try {
+    res.json(await series.getShow(req.params.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Episodes are VOD files like films, so they get the same probe and the same
+// direct/remux split.
+app.get('/api/episodes/:id(\\d+)/playback', async (req, res) => {
+  try {
+    const probe = await series.probeEpisode(req.params.id);
+    const ffmpeg = await remux.available();
+    if (probe.mode === 'remux' && !ffmpeg) {
+      res.json({
+        ...probe,
+        mode: 'unsupported',
+        reason: `${probe.container.toUpperCase()} — needs ffmpeg on the server`,
+        ffmpeg,
+      });
+      return;
+    }
+    res.json({ ...probe, ffmpeg });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/stream/episode/:id(\\d+)', (req, res) => {
+  try {
+    iptv.proxyFrom(series.episodeUrl(req.params.id, req.query.ext || 'vod'), req, res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/stream/episode/:id(\\d+)/remux', async (req, res) => {
+  const start = Math.max(0, Number(req.query.t) || 0);
+  try {
+    await remux.stream(series.episodeUrl(req.params.id), { start }, req, res);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    else res.end();
   }
 });
 

@@ -35,6 +35,7 @@ webui/
     vod.js         Film catalogue: fetch/cache, search, detail, container probe
     remux.js       ffmpeg container swap for MKV/AVI films (fMP4 on stdout)
     catchup.js     Archive-capable channels, their EPG, timeshift URLs
+    series.js      TV series catalogue: shows, seasons, episodes
   public/          Static frontend (ES modules, no bundler)
     js/
       app.js       App class — orchestrates all state, layout, players, controls
@@ -46,6 +47,7 @@ webui/
       films.js     Films — browse/search overlay, detail view, play
       history.js   WatchHistory — recently played films + resume points
       catchup.js   Catch Up — channel list + EPG guide for the last 5–14 days
+      series.js    Series — browse/search shows, seasons, episodes
       shortcuts.js Global keyboard handler — delegates to App methods
     css/styles.css Single stylesheet for everything
 ```
@@ -83,6 +85,12 @@ offer a timeline that can't work for a remuxed stream). Runtime comes from
 Every live ffmpeg holds one of the account's limited connections, so the process
 is SIGKILLed as soon as the client disconnects.
 
+**Series**: `get_series` already carries plot, cast, genre, rating and artwork,
+so the browse grid needs no per-show lookup — only `get_series_info` (seasons +
+episodes) does. Episodes are ordinary VOD files at `/series/<user>/<pass>/<id>`,
+so they reuse `vod.probeStream()` and the same direct/remux split as films;
+`Player.setMovie()` takes `type: 'episode'` and swaps the stream base.
+
 **Catch-up TV**: 137 of ~8,500 live channels carry `tv_archive` with 5–14 days
 of history (mostly the UK terrestrials). `get_simple_data_table&stream_id=`
 returns that channel's EPG with base64 title/description and a `has_archive`
@@ -99,9 +107,11 @@ you'd silently fetch the wrong hour.
 
 **Continue watching**: `Player` reports its position every 5s (and on pause,
 film swap, destroy and `pagehide`) to `WatchHistory`, which keeps the last 30
-films in localStorage. Entries store the playback mode and runtime as well as
-the position, so resuming from the row starts immediately without re-probing the
-container. `applySetup()` restores a film via `history.resumeAt(id)` — restoring
+films and episodes in localStorage. Entries are keyed by `(id, type)` — films
+and episodes come from different id spaces and would otherwise collide — and
+episodes carry show/season/episode so the row can label them. Film entries store
+the playback mode so resuming skips the probe; episodes re-probe via
+`playEpisode()`. `applySetup()` restores a film via `history.resumeAt(id)` — restoring
 at 0 would replay from the start and overwrite the saved point.
 
 **Layout**: `computeLayout(mode, split)` in `layout.js` returns `{ rects, handle }` in percent units. Three modes: `horizontal` (side-by-side, vertical drag handle), `diag-tlbr` / `diag-bltr` (large + overlapping inset, point drag handle). `App.render()` calls this and positions players via `applyRect()`.
@@ -120,4 +130,4 @@ at 0 would replay from the start and overwrite the saved point.
 
 ### Keyboard shortcuts
 
-`Space` pause/resume film · `F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `M` films · `T` catch-up · `?` help
+`Space` pause/resume film · `F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `M` films · `V` series · `T` catch-up · `?` help

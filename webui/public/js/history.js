@@ -41,26 +41,45 @@ export class WatchHistory {
     return this.data.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
 
-  get(id) {
-    return this.data.find((e) => e.id === id) || null;
+  // Films and episodes come from different id spaces, so an id alone could
+  // collide. Entries written before types existed are films.
+  get(id, type = 'movie') {
+    return this.data.find((e) => e.id === id && (e.type || 'movie') === type) || null;
   }
 
-  // Where playback should start for this film: 0 unless there's a meaningful
-  // resume point that isn't effectively the end.
-  resumeAt(id) {
-    const e = this.get(id);
+  // Where playback should start: 0 unless there's a meaningful resume point
+  // that isn't effectively the end.
+  resumeAt(id, type = 'movie') {
+    const e = this.get(id, type);
     if (!e || e.finished) return 0;
     return e.position > MIN_RESUME ? e.position : 0;
   }
 
-  // Called when a film starts and periodically as it plays.
-  record({ id, title, poster, durationSecs, mode, position = 0 }) {
+  // Called when something starts and periodically as it plays.
+  record({
+    id,
+    type = 'movie',
+    title,
+    poster,
+    durationSecs,
+    mode,
+    position = 0,
+    showId,
+    showName,
+    season,
+    episode,
+  }) {
     if (!id) return;
-    let entry = this.get(id);
+    let entry = this.get(id, type);
     if (!entry) {
-      entry = { id };
+      entry = { id, type };
       this.data.push(entry);
     }
+    entry.type = type;
+    if (showId !== undefined) entry.showId = showId;
+    if (showName !== undefined) entry.showName = showName;
+    if (season !== undefined) entry.season = season;
+    if (episode !== undefined) entry.episode = episode;
     entry.title = title || entry.title || '';
     entry.poster = poster || entry.poster || '';
     entry.durationSecs = durationSecs || entry.durationSecs || null;
@@ -79,9 +98,9 @@ export class WatchHistory {
     this._write();
   }
 
-  remove(id) {
+  remove(id, type = 'movie') {
     const before = this.data.length;
-    this.data = this.data.filter((e) => e.id !== id);
+    this.data = this.data.filter((e) => !(e.id === id && (e.type || 'movie') === type));
     if (this.data.length !== before) this._write();
   }
 

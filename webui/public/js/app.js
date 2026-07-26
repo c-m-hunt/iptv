@@ -6,6 +6,7 @@ import { Profile } from './profile.js';
 import { Films } from './films.js';
 import { WatchHistory } from './history.js';
 import { Catchup } from './catchup.js';
+import { Series } from './series.js';
 import { computeLayout, clampSplit, MODES, MODE_LABELS } from './layout.js';
 import { installShortcuts } from './shortcuts.js';
 
@@ -26,10 +27,15 @@ class App {
     this.films = new Films(document.getElementById('films'), {
       history: this.history,
       onPlay: (film, playback, opts) => this.playMovie(film, playback, opts),
+      onPlayEpisode: (episode, opts) => this.playEpisode(episode, opts),
     });
 
     this.catchup = new Catchup(document.getElementById('catchup'), {
       onPlay: (programme) => this.playCatchup(programme),
+    });
+    this.series = new Series(document.getElementById('series'), {
+      history: this.history,
+      onPlayEpisode: (episode) => this.playEpisode(episode),
     });
 
     // A closing tab gets no timeupdate, so flush the resume point on the way out.
@@ -233,6 +239,7 @@ class App {
       .addEventListener('click', () => this.openSearchFor(this.focusedNum));
     document.getElementById('btn-films').addEventListener('click', () => this.toggleFilms());
     document.getElementById('btn-catchup').addEventListener('click', () => this.toggleCatchup());
+    document.getElementById('btn-series').addEventListener('click', () => this.toggleSeries());
     document.getElementById('btn-help').addEventListener('click', () => this.toggleHelp());
 
     // First user gesture unlocks audio: unmute the focused player.
@@ -351,6 +358,37 @@ class App {
 
   toggleCatchup() {
     this.catchup.toggle();
+  }
+
+  toggleSeries() {
+    this.series.toggle();
+  }
+
+  // Episodes play exactly like films; the probe decides direct vs remux.
+  async playEpisode(episode, { startAt = null } = {}) {
+    const p = this.players.find((x) => x.num === this.focusedNum) || this.players[0];
+    if (!p) return;
+    let playback = { mode: 'direct' };
+    try {
+      const resp = await fetch(`/api/episodes/${episode.id}/playback`);
+      if (resp.ok) playback = await resp.json();
+    } catch {
+      /* fall back to a direct attempt rather than refusing to play */
+    }
+    if (playback.mode === 'unsupported') {
+      this.toast(playback.reason || 'This episode can’t be played', 2600);
+      return;
+    }
+    const resume = startAt == null ? this.history.resumeAt(episode.id, 'episode') : startAt;
+    p.setMovie(episode, playback, { startAt: resume });
+    this.history.record({
+      ...episode,
+      mode: playback.mode,
+      position: resume,
+    });
+    const label = episodeLabel(episode);
+    this.toast(resume > 0 ? `Resuming ${label} from ${fmtClock(resume)}` : `Playing ${label}`);
+    this._scheduleSaveLast();
   }
 
   playCatchup(programme) {
@@ -518,6 +556,10 @@ class App {
       this.catchup.close();
       did = true;
     }
+    if (this.series.isOpen()) {
+      this.series.close();
+      did = true;
+    }
     return did;
   }
 
@@ -528,6 +570,14 @@ class App {
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => el.classList.remove('show'), ms);
   }
+}
+
+function episodeLabel(e) {
+  const code =
+    e.season != null && e.episode != null
+      ? `S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`
+      : '';
+  return [e.showName, code, e.title].filter(Boolean).join(' · ');
 }
 
 function cleanChannel(n) {

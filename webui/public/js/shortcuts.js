@@ -94,6 +94,12 @@ export function installShortcuts(app) {
         app.toggleCatchup();
         break;
 
+      case 'v':
+      case 'V':
+        e.preventDefault();
+        app.toggleSeries();
+        break;
+
       case 's':
       case 'S':
         e.preventDefault();

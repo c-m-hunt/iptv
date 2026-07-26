@@ -261,11 +261,15 @@ function detectContainer(buf) {
 }
 
 async function probeMovie(id, { force = false } = {}) {
-  const key = String(id);
+  return probeStream(movieUrl(id), `movie:${id}`, { force, id: Number(id) });
+}
+
+// Shared by films and series episodes: both are VOD files behind a URL whose
+// extension says nothing about what's actually in it.
+async function probeStream(url, key, { force = false, id = null } = {}) {
   const hit = probeCache.get(key);
   if (!force && hit && Date.now() - hit.at < PROBE_TTL) return hit.data;
 
-  const url = movieUrl(key);
   const resp = await fetch(url, {
     headers: { 'User-Agent': STREAM_UA, Range: 'bytes=0-65535' },
     signal: AbortSignal.timeout(20000),
@@ -291,7 +295,7 @@ async function probeMovie(id, { force = false } = {}) {
   const size = Number(sizeHeader.split('/')[1]) || null;
 
   const data = {
-    id: Number(key),
+    id,
     container,
     hevc,
     direct,
@@ -322,5 +326,6 @@ module.exports = {
   getCategories,
   getMovie,
   probeMovie,
+  probeStream,
   movieUrl,
 };

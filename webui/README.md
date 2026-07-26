@@ -67,6 +67,8 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 - **Films** browses the ~21k VOD catalogue by search, category and sort, with
   posters, plot, cast and ratings. Play loads the film into the focused player
   with a seek bar.
+- **Series** browses 6,500 TV shows with seasons and episodes, plot, cast and
+  ratings. Episodes remember where you got to, shown inline in the episode list.
 - **Catch Up** replays the last 5–14 days from the 137 archive-capable channels
   (BBC, ITV, Channel 4/5 and similar): pick a channel, pick a programme from the
   guide, watch it with a working scrub bar.
@@ -86,6 +88,7 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 | `1` / `2` | Focus a player and (re)open its channel search |
 | `A` | Toggle the profile panel (subscription / expiry) |
 | `M` | Toggle the film browser |
+| `V` | Toggle the series browser |
 | `T` | Toggle the catch-up guide |
 | `?` | Toggle the help panel |
 
@@ -110,6 +113,9 @@ switch). Anything not covered by a video is black.
   AAC). Remuxed films seek by restarting the stream at an offset, so both cases
   get a working scrub bar. Without ffmpeg installed the app still runs — the
   non-MP4 films just say so instead of offering Play.
+- **Series**: `get_series` carries enough metadata for the browse grid on its
+  own; `get_series_info` adds seasons and episodes. Episodes are VOD files, so
+  they share the film probe and the direct/remux playback split.
 - **Catch-up**: live channels advertise `tv_archive` and `tv_archive_duration`;
   only 137 here have it. Programmes come from the channel's EPG (base64 titles,
   `has_archive` per listing) and play via `timeshift.php` as MPEG-TS. Start times
@@ -134,6 +140,11 @@ switch). Anything not covered by a video is black.
 | `GET /api/movies/:id/playback` | `{ container, mode, reason, size, ffmpeg }` — `mode` is `direct`, `remux` or `unsupported` |
 | `GET /api/stream/movie/:id` | Proxied film, byte-range capable |
 | `GET /api/stream/movie/:id/remux?t=` | MKV/AVI remuxed to fMP4, starting at `t` seconds |
+| `GET /api/series?q=&category=&sort=` | `{ total, items }` — series catalogue |
+| `GET /api/series/categories` | `[{ id, name, count }]` |
+| `GET /api/series/:id` | Show metadata plus seasons and episodes |
+| `GET /api/episodes/:id/playback` | `{ container, mode, reason, ... }` |
+| `GET /api/stream/episode/:id[/remux?t=]` | Proxied / remuxed episode |
 | `GET /api/catchup/channels?q=` | Archive-capable channels: `[{ id, name, icon, days }]` |
 | `GET /api/catchup/:id/epg` | Programmes still inside the archive window |
 | `GET /api/stream/catchup/:id?start=&duration=` | Proxied archive stream (MPEG-TS) |

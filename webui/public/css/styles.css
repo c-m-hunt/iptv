@@ -1228,6 +1228,116 @@ body {
   }
 }
 
+/* --- series (shares the film browser's chrome) -------------------------- */
+#series {
+  position: fixed;
+  z-index: 48;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  background: rgba(4, 6, 9, 0.97);
+  backdrop-filter: blur(6px);
+}
+
+#series.open {
+  display: flex;
+}
+
+.sv-seasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 20px 12px;
+}
+
+.sv-season {
+  padding: 5px 12px;
+  font-size: 13px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.sv-season:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.sv-season.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #00131c;
+  font-weight: 700;
+}
+
+.sv-eps {
+  padding: 0 12px 16px;
+}
+
+.sv-ep {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sv-ep:hover {
+  background: rgba(56, 189, 248, 0.14);
+}
+
+.sv-epnum {
+  flex: 0 0 auto;
+  width: 26px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sv-epbody {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sv-eptitle {
+  font-size: 14px;
+}
+
+.sv-epplot {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sv-epbar {
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+  max-width: 260px;
+}
+
+.sv-epbar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.sv-epdur {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* --- catch-up guide ---------------------------------------------------- */
 #catchup {
   position: fixed;

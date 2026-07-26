@@ -156,9 +156,17 @@ export class Player {
       id: movie.id,
       name: movie.title || movie.name,
       kind: 'movie',
+      // Episodes are VOD files too — same playback, different path and a bit
+      // of extra identity so the resume list can label them.
+      type: movie.type === 'episode' ? 'episode' : 'movie',
+      streamBase: movie.type === 'episode' ? '/api/stream/episode' : '/api/stream/movie',
       mode: playback.mode === 'remux' ? 'remux' : 'direct',
       durationSecs: movie.durationSecs || playback.durationSecs || null,
       poster: movie.poster || '',
+      showId: movie.showId,
+      showName: movie.showName,
+      season: movie.season,
+      episode: movie.episode,
     };
     this.kind = 'movie';
     this._errorCount = 0;
@@ -206,9 +214,8 @@ export class Player {
     // Our own bar drives both modes; native controls would offer a timeline
     // that can't work for a remuxed stream.
     video.controls = false;
-    video.src = remux
-      ? `/api/stream/movie/${id}/remux?t=${Math.floor(offset)}`
-      : `/api/stream/movie/${id}`;
+    const base = this.channel?.streamBase || '/api/stream/movie';
+    video.src = remux ? `${base}/${id}/remux?t=${Math.floor(offset)}` : `${base}/${id}`;
     video.load();
 
     // A remuxed stream already starts at the offset; a direct one has the whole
@@ -309,9 +316,14 @@ export class Player {
     this._lastReport = now;
     this.onProgress({
       id: this.channel.id,
+      type: this.channel.type || 'movie',
       title: this.channel.name,
       poster: this.channel.poster,
       mode: this.channel.mode,
+      showId: this.channel.showId,
+      showName: this.channel.showName,
+      season: this.channel.season,
+      episode: this.channel.episode,
       durationSecs: this._filmDuration() || this.channel.durationSecs,
       position: this._filmPosition(),
     });
