@@ -26,7 +26,11 @@
 //   GET /api/refresh             -> force-refresh catalogue cache
 //   /                            -> static frontend (../public)
 
-require('./env'); // load .env into process.env before anything reads it
+// Settings sources, highest priority first: real environment variables, then
+// .env, then an optional config.json. Both must load before anything reads
+// process.env.
+require('./env');
+require('./config');
 const path = require('path');
 const dns = require('dns').promises;
 const express = require('express');

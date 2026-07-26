@@ -1,0 +1,49 @@
+{
+  "_comment": [
+    "Optional config file. Copy to config.json (gitignored) and edit.",
+    "Precedence: environment variables > .env > this file > defaults,",
+    "so anything here can be overridden for a single run, e.g. PORT=9000 make dev.",
+    "Every key is optional; delete what you don't need.",
+    "A flat form using the env var names directly also works, e.g. \"IPTV_USERNAME\": \"...\"."
+  ],
+
+  "provider": {
+    "username": "",
+    "password": "",
+    "loginUrl": "http://your-provider.example.com",
+    "server": "your-stream-host.example.com",
+    "port": "80",
+    "userAgent": "VLC/3.0.20 LibVLC/3.0.20",
+    "localStorageDb": ""
+  },
+
+  "server": {
+    "port": 8090,
+    "host": "0.0.0.0",
+    "cacheDir": ""
+  },
+
+  "cache": {
+    "live": 21600,
+    "account": 15,
+    "films": 21600,
+    "filmInfo": 3600,
+    "filmProbe": 86400,
+    "series": 21600,
+    "seriesInfo": 3600,
+    "epg": 600,
+    "posterMb": 32
+  },
+
+  "playback": {
+    "ffmpegPath": "ffmpeg",
+    "ffprobePath": "ffprobe",
+    "audioBitrate": "192k",
+    "audioChannels": 2
+  },
+
+  "remote": {
+    "host": "",
+    "pairTtl": 600
+  }
+}

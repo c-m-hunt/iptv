@@ -249,7 +249,7 @@ async function getMovie(id, { force = false } = {}) {
 // actual files are a mix of MP4, MKV and AVI. Only MP4 plays in a browser, so
 // sniff the first bytes to find out what we're dealing with before playing.
 const probeCache = new Map(); // id -> { at, data }
-const PROBE_TTL = 24 * 3600 * 1000;
+const PROBE_TTL = Number(process.env.VOD_PROBE_TTL || 86400) * 1000; // 24h
 
 function detectContainer(buf) {
   if (buf.length >= 12 && buf.slice(4, 8).toString('latin1') === 'ftyp') return 'mp4';

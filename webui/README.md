@@ -5,14 +5,16 @@ in one or two tiles, a film library, TV series with seasons and episodes,
 catch-up for the last week of broadcast telly, and a phone remote so you can
 drive it all from the sofa.
 
-Nothing provider-specific is hardcoded — point it at your own provider via
-`.env`. Credentials stay on the server; the browser only ever talks to this app.
+Nothing provider-specific is hardcoded — point it at your own provider with a
+config file, a `.env`, or environment variables. Credentials stay on the server;
+the browser only ever talks to this app.
 
 ```
 webui/
   server/          Node + Express (CommonJS)
     index.js         Routes, static host, artwork proxy
     env.js           Loads .env before anything reads it
+    config.js        Optional config.json (lowest-priority settings)
     iptv.js          Credentials, live catalogue, account info, stream proxy
     vod.js           Film catalogue: search, detail, container probe
     series.js        Series catalogue: shows, seasons, episodes
@@ -38,20 +40,63 @@ webui/
 
 ## Configure
 
+Settings can come from a config file, a `.env` file, or the environment. They
+layer, highest priority first:
+
+```
+environment variables  >  webui/.env  >  webui/config.json  >  defaults
+```
+
+So keep your normal setup in a file and override one value for a single run:
+
+```bash
+PORT=9000 make dev
+```
+
+**Config file** (JSON, gitignored):
+
 ```bash
 cd webui
+cp config.example.json config.json && $EDITOR config.json
+```
+
+```json
+{
+  "provider": {
+    "username": "you",
+    "password": "secret",
+    "loginUrl": "http://your-provider.example.com",
+    "server": "your-stream-host.example.com"
+  },
+  "server": { "port": 8090 },
+  "cache": { "live": 21600 },
+  "remote": { "host": "192.168.1.20" }
+}
+```
+
+Every key is optional — see `config.example.json` for the full set. It's looked
+for at `$IPTV_CONFIG`, then `webui/config.json`, then
+`~/.config/iptv/config.json`. A flat form using the environment variable names
+directly (`{ "IPTV_USERNAME": "you" }`) works too.
+
+**`.env` file** — same settings, shell syntax:
+
+```bash
 cp .env.example .env && $EDITOR .env
 ```
 
-Set `IPTV_USERNAME`, `IPTV_PASSWORD`, `IPTV_LOGIN_URL` (the host serving
-`player_api.php`) and `IPTV_SERVER` (the host serving streams).
+Whichever route you choose, the app needs `IPTV_USERNAME`, `IPTV_PASSWORD`,
+`IPTV_LOGIN_URL` (the host serving `player_api.php`) and `IPTV_SERVER` (the host
+serving streams).
 
 Alternatively, if you use a desktop IPTV app that keeps an Xtream profile in
-localStorage, point `IPTV_LS_DB` at its `file__0.localstorage` and the
-credentials are read from there. Environment variables win if both are present.
+localStorage, point `IPTV_LS_DB` (or `provider.localStorageDb`) at its
+`file__0.localstorage` and the credentials are read from there.
 
-See `.env.example` for the full list, including cache lifetimes and the remote
-settings.
+What else is configurable: cache lifetimes for each catalogue, the artwork cache
+size, ffmpeg/ffprobe paths and the audio the remuxer produces, the user agent
+sent to the portal, and the remote's advertised host and pairing timeout. See
+`config.example.json` or `.env.example`.
 
 ## Run
 

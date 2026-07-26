@@ -26,6 +26,22 @@ Two dependencies beyond Express: `ws` (remote relay) and `qrcode` (pairing QR).
 `ffmpeg`/`ffprobe` are external binaries, optional but needed for half the film
 and episode catalogue.
 
+## Settings
+
+Everything reads `process.env`. Two loaders run first, in this order, and
+neither overwrites what's already set:
+
+```
+require('./env')     # webui/.env
+require('./config')  # $IPTV_CONFIG, webui/config.json, ~/.config/iptv/config.json
+```
+
+That yields **env vars > .env > config file > code defaults**. `config.js` maps
+nested JSON keys (`provider.username`) onto the env names the rest of the code
+already uses, so nothing else needs to know a config file exists. Adding a
+setting means: read it from `process.env` where it's used, add a line to `MAP` in
+`config.js`, and list it in `config.example.json` and `.env.example`.
+
 ## Layout
 
 ```
@@ -33,6 +49,7 @@ webui/
   server/                  Node + Express, CommonJS
     index.js               Routes, static host, artwork proxy (SSRF-guarded, cached)
     env.js                 Loads .env before anything reads it
+    config.js              Optional config.json, filling any gaps .env left
     iptv.js                Credentials, live catalogue, account info, stream proxy
     vod.js                 Films: catalogue cache, search, detail, container probe
     series.js              Series: shows, seasons, episodes (reuses vod's probe)

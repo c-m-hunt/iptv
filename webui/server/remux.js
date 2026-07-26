@@ -16,6 +16,8 @@ const { spawn, execFile } = require('child_process');
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
 const UA = process.env.IPTV_USER_AGENT || 'VLC/3.0.20 LibVLC/3.0.20';
+const AUDIO_BITRATE = process.env.REMUX_AUDIO_BITRATE || '192k';
+const AUDIO_CHANNELS = Number(process.env.REMUX_AUDIO_CHANNELS || 2);
 
 // Browsers play AAC; AC3/EAC3/DTS need converting. Everything else about the
 // file is passed through untouched.
@@ -100,9 +102,10 @@ function buildArgs(url, { start = 0, audioCopy = false }) {
   if (audioCopy) {
     args.push('-c:a', 'copy');
   } else {
-    // Downmix to stereo: 5.1 AC3 is common here and browsers are happier with
-    // two channels than with a surround AAC layout.
-    args.push('-c:a', 'aac', '-b:a', '192k', '-ac', '2');
+    // Downmix to stereo by default: 5.1 AC3 is common here and browsers are
+    // happier with two channels than with a surround AAC layout. Both are
+    // configurable for anyone feeding a system that wants otherwise.
+    args.push('-c:a', 'aac', '-b:a', AUDIO_BITRATE, '-ac', String(AUDIO_CHANNELS));
   }
 
   // Copying from mid-file leaves timestamps starting wherever the keyframe was;

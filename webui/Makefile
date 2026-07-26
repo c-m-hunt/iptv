@@ -38,8 +38,13 @@ run: build
 	elif [ -f "$(ENV_FILE)" ]; then \
 	  ARGS="$$ARGS --env-file $(ENV_FILE)"; \
 	  echo "-> credentials: $(ENV_FILE)"; \
+	elif [ -f "config.json" ]; then \
+	  echo "-> credentials: config.json"; \
 	else \
-	  echo "!! no creds file at LS_DB and no $(ENV_FILE) — set IPTV_* in $(ENV_FILE) (see .env.example)"; \
+	  echo "!! no creds: set IPTV_* in $(ENV_FILE), or copy config.example.json to config.json"; \
+	fi; \
+	if [ -f "config.json" ]; then \
+	  ARGS="$$ARGS -v $(CURDIR)/config.json:/app/config.json:ro"; \
 	fi; \
 	echo "-> http://localhost:$(PORT)"; \
 	docker run -it $$ARGS $(IMAGE)
