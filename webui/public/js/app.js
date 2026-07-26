@@ -213,6 +213,7 @@ class App {
     document.getElementById('btn-layout').addEventListener('click', () => this.cycleLayout());
     document.getElementById('btn-profile').addEventListener('click', () => this.toggleProfile());
     document.getElementById('btn-films').addEventListener('click', () => this.toggleFilms());
+    document.getElementById('btn-help').addEventListener('click', () => this.toggleHelp());
 
     // First user gesture unlocks audio: unmute the focused player.
     const unlock = () => {

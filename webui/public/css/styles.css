@@ -1,6 +1,9 @@
 /* IPTV Player Grid — black-everywhere player canvas + overlays. */
 
 :root {
+  /* Height of the control bar. Anything that would otherwise sit underneath it
+     (the film transport, the profile panel) clears it by this much. */
+  --toolbar-h: 48px;
   --accent: #38bdf8;
   --panel-bg: rgba(8, 10, 14, 0.92);
   --panel-border: rgba(255, 255, 255, 0.12);
@@ -315,11 +318,6 @@ body {
   flex: 1 1 auto;
 }
 
-#toolbar .hint {
-  color: var(--muted);
-  font-size: 12px;
-}
-
 #toolbar button {
   padding: 6px 12px;
   font-size: 13px;
@@ -479,7 +477,7 @@ body {
   left: 0;
   /* Stop short of the control bar: the Profile button lives bottom-left, and a
      full-height panel would sit on top of it and block its own toggle. */
-  bottom: 46px;
+  bottom: var(--toolbar-h);
   width: 330px;
   max-width: 85vw;
   display: flex;
@@ -1155,7 +1153,12 @@ body {
   z-index: 6;
   left: 0;
   right: 0;
-  bottom: 0;
+  /* Sit above the control bar rather than under it — the toolbar's buttons and
+     the transport controls both live bottom-left and would otherwise collide.
+     A fixed offset, not one that tracks the toolbar's auto-hide: the toolbar
+     reappears on mouse move, so a tracking offset would shift the controls
+     upward at the exact moment you reached for them. */
+  bottom: var(--toolbar-h);
   display: none;
   align-items: center;
   gap: 10px;
