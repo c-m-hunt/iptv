@@ -21,6 +21,14 @@ export function installShortcuts(app) {
     }
 
     switch (e.key) {
+      case ' ':
+        // A focused button is activated by Space too — let it have the key
+        // rather than firing both the button and playback.
+        if (t && t.tagName === 'BUTTON') break;
+        e.preventDefault(); // also stops Space scrolling the page
+        app.togglePlayPause();
+        break;
+
       case 'f':
       case 'F':
         e.preventDefault();

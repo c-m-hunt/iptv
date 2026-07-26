@@ -169,6 +169,13 @@ class App {
     this.players.forEach((p) => p.setShowInfo(this.showInfo));
   }
 
+  // Space: pause/resume the focused film.
+  togglePlayPause() {
+    const p = this.players.find((x) => x.num === this.focusedNum) || this.players[0];
+    if (!p) return;
+    if (!p.togglePlay()) this.toast('Live TV can’t be paused', 1200);
+  }
+
   adjustVolume(delta) {
     const p = this.players.find((x) => x.num === this.focusedNum);
     if (p) p.setVolume(p.volume + delta);

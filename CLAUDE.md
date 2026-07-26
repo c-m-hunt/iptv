@@ -104,4 +104,4 @@ at 0 would replay from the start and overwrite the saved point.
 
 ### Keyboard shortcuts
 
-`F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `M` films · `?` help
+`Space` pause/resume film · `F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `M` films · `?` help

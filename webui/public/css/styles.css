@@ -1,9 +1,11 @@
 /* IPTV Player Grid — black-everywhere player canvas + overlays. */
 
 :root {
-  /* Height of the control bar. Anything that would otherwise sit underneath it
-     (the film transport, the profile panel) clears it by this much. */
+  /* Heights of the two fixed strips at the bottom of the screen. Anything that
+     would otherwise sit underneath them (the film transport, the volume
+     overlay, the profile panel) clears them by these amounts. */
   --toolbar-h: 48px;
+  --film-bar-h: 52px;
   --accent: #38bdf8;
   --panel-bg: rgba(8, 10, 14, 0.92);
   --panel-border: rgba(255, 255, 255, 0.12);
@@ -122,7 +124,9 @@ body {
 /* --- per-player volume overlay ---------------------------------------- */
 .vol-overlay {
   position: absolute;
-  bottom: 10px;
+  /* Clear the control bar: both live bottom-right, and the Shortcuts button
+     would otherwise take the clicks meant for the volume slider. */
+  bottom: calc(var(--toolbar-h) + 10px);
   right: 10px;
   z-index: 5;
   display: flex;
@@ -142,6 +146,11 @@ body {
 .player:hover .vol-overlay {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* A film adds its transport bar to the same corner — stack above that too. */
+.player.is-movie .vol-overlay {
+  bottom: calc(var(--toolbar-h) + var(--film-bar-h) + 10px);
 }
 
 .player.searching .vol-overlay {

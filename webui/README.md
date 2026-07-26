@@ -76,6 +76,7 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 
 | Key | Action |
 | --- | --- |
+| `Space` | Pause / resume the focused film (films only) |
 | `F` | Toggle fullscreen |
 | `← / →` | Adjust split proportion (`↑ / ↓` too, in diagonal) |
 | `D` | Toggle player # / channel info overlay |

@@ -56,9 +56,7 @@ export class Player {
     this._scrubbing = false;
     this.fbPlay.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (this.video.paused) this.video.play()?.catch(() => {});
-      else this.video.pause();
-      this._syncFilmBar();
+      this.togglePlay();
     });
     this.fbSeek.addEventListener('mousedown', (e) => e.stopPropagation());
     this.fbSeek.addEventListener('input', () => {
@@ -232,6 +230,16 @@ export class Player {
   }
 
   // -- film transport ------------------------------------------------------
+  // Films only: a paused live stream drifts behind and _applyMute() resumes it
+  // again on the next focus or volume change.
+  togglePlay() {
+    if (this.kind !== 'movie') return false;
+    if (this.video.paused) this.video.play()?.catch(() => {});
+    else this.video.pause();
+    this._syncFilmBar();
+    return true;
+  }
+
   // Total runtime comes from the film's metadata; for a direct stream the
   // element's own duration is better, but a remuxed stream doesn't have one.
   _filmDuration() {
