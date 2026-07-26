@@ -134,8 +134,13 @@ function render() {
     el('t-dur').textContent = '0:00';
   } else {
     kindEl.textContent = describeKind(p);
-    titleEl.textContent = p.title || '(nothing)';
+    // A live channel's title carries its quality after pipes; show the name big
+    // and the qualifiers underneath rather than one long run-on line.
+    const live = p.kind === 'live';
+    const { base, tags } = splitName(p.title || '');
+    titleEl.textContent = (live ? base : p.title) || '(nothing)';
     subEl.textContent = [
+      live ? tags.join(' · ') : '',
       p.showName && p.season != null ? `S${pad(p.season)}E${pad(p.episode)}` : '',
       p.channelName ? cleanName(p.channelName) : '',
       p.loading ? 'loading…' : '',
@@ -413,11 +418,15 @@ async function load({ append = false } = {}) {
       browseState.items = list;
       resultsEl.innerHTML = list.length
         ? list
-            .map(
-              (c, i) =>
+            .map((c, i) => {
+              const { base, tags } = splitName(c.name);
+              return (
                 `<button class="rowitem" data-play="${i}"><span class="ri-body">` +
-                `<span class="ri-title">${escapeHtml(cleanName(c.name))}</span></span></button>`
-            )
+                `<span class="ri-title">${escapeHtml(base)}</span>` +
+                (tags.length ? `<span class="ri-sub">${escapeHtml(tags.join(' · '))}</span>` : '') +
+                `</span></button>`
+              );
+            })
             .join('')
         : '<div class="hint">No channels matched.</div>';
     } else if (kind === 'films' || kind === 'series') {
@@ -458,13 +467,16 @@ async function load({ append = false } = {}) {
       browseState.items = filtered;
       resultsEl.innerHTML = filtered.length
         ? filtered
-            .map(
-              (c, i) =>
+            .map((c, i) => {
+              const { base, tags } = splitName(c.name);
+              const sub = [...tags, `${c.days} days`].join(' · ');
+              return (
                 `<button class="rowitem" data-guide="${i}">` +
                 thumb(c.icon) +
-                `<span class="ri-body"><span class="ri-title">${escapeHtml(cleanName(c.name))}</span>` +
-                `<span class="ri-sub">${c.days} days</span></span></button>`
-            )
+                `<span class="ri-body"><span class="ri-title">${escapeHtml(base)}</span>` +
+                `<span class="ri-sub">${escapeHtml(sub)}</span></span></button>`
+              );
+            })
             .join('')
         : '<div class="hint">No channels matched.</div>';
     }
@@ -656,6 +668,17 @@ function describeKind(p) {
 
 function cleanName(n) {
   return String(n).replace(/\s*\|.*$/, '').trim();
+}
+
+// Channel names carry their quality and source after pipes: "BBC One | FHD |".
+// That suffix is the only thing telling four otherwise identical "BBC One"
+// entries apart, so it's kept as a second line rather than thrown away.
+function splitName(name) {
+  const parts = String(name || '')
+    .split('|')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return { base: parts[0] || String(name || ''), tags: parts.slice(1) };
 }
 
 function pad(n) {
