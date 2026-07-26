@@ -1,16 +1,17 @@
 # IPTV Player Grid
 
-A single-tab web UI for arranging one or two live IPTV players, full-screening
-them, and overlaying **2026 FIFA World Cup** live scores & group standings in the
-empty corners of a diagonal layout.
+A single-tab web UI for arranging one or two IPTV players and full-screening
+them: live TV, films, TV series and catch-up, with a phone remote for driving it
+all from the sofa.
 
-Works with any **Xtream Codes** compatible IPTV provider. Live channels only.
-Nothing provider-specific is hardcoded — configure it via `.env`.
+Works with any **Xtream Codes** compatible IPTV provider. Nothing
+provider-specific is hardcoded — configure it via `.env`.
 
 ```
 webui/
-  server/      Node + Express API (credentials, catalogue, stream proxy, World Cup)
+  server/      Node + Express API (credentials, catalogue, stream proxy, remote)
   public/      Frontend (no credentials ever reach the browser)
+  public/remote/  Phone remote-control UI
   Dockerfile   Containerised app (API + static frontend)
   Makefile     build / run / dev helpers
 ```

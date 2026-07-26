@@ -1,7 +1,7 @@
 {
   "name": "iptv-player-grid",
   "version": "1.0.0",
-  "description": "Web UI to arrange IPTV video players in a single tab, with World Cup live data overlays.",
+  "description": "Web UI to arrange IPTV players in a single tab: live TV, films, series, catch-up, and a phone remote.",
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
