@@ -66,6 +66,7 @@ export class WatchHistory {
     position = 0,
     showId,
     showName,
+    showCover,
     season,
     episode,
   }) {
@@ -78,6 +79,7 @@ export class WatchHistory {
     entry.type = type;
     if (showId !== undefined) entry.showId = showId;
     if (showName !== undefined) entry.showName = showName;
+    if (showCover !== undefined) entry.showCover = showCover;
     if (season !== undefined) entry.season = season;
     if (episode !== undefined) entry.episode = episode;
     entry.title = title || entry.title || '';
@@ -96,6 +98,30 @@ export class WatchHistory {
       this.data = this.data.slice(0, MAX);
     }
     this._write();
+  }
+
+  // One entry per show — the episode you were last watching. That's what a
+  // "continue watching" row for series should offer, rather than every episode
+  // of the same show competing for space.
+  listShows() {
+    const byShow = new Map();
+    for (const e of this.data) {
+      if ((e.type || 'movie') !== 'episode') continue;
+      const key = e.showId ?? e.showName ?? e.id;
+      const seen = byShow.get(key);
+      if (!seen || (e.updatedAt || 0) > (seen.updatedAt || 0)) byShow.set(key, e);
+    }
+    return [...byShow.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  }
+
+  // Drop every episode of a show, so removing it from the row doesn't just
+  // surface an older episode of the same series.
+  removeShow(showId) {
+    const before = this.data.length;
+    this.data = this.data.filter(
+      (e) => !((e.type || 'movie') === 'episode' && e.showId === showId)
+    );
+    if (this.data.length !== before) this._write();
   }
 
   remove(id, type = 'movie') {

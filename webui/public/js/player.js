@@ -165,6 +165,7 @@ export class Player {
       poster: movie.poster || '',
       showId: movie.showId,
       showName: movie.showName,
+      showCover: movie.showCover,
       season: movie.season,
       episode: movie.episode,
     };
@@ -295,6 +296,7 @@ export class Player {
   _syncFilmBar() {
     if (!this.isOnDemand()) return;
     this.fbPlay.textContent = this.video.paused ? '▶' : '⏸';
+    this.el.classList.toggle('is-paused', this.video.paused);
     if (this._scrubbing) return;
     const dur = this._filmDuration();
     const pos = this._filmPosition();
@@ -322,6 +324,7 @@ export class Player {
       mode: this.channel.mode,
       showId: this.channel.showId,
       showName: this.channel.showName,
+      showCover: this.channel.showCover,
       season: this.channel.season,
       episode: this.channel.episode,
       durationSecs: this._filmDuration() || this.channel.durationSecs,
@@ -350,7 +353,7 @@ export class Player {
   }
 
   _loadStream(streamId) {
-    this.el.classList.remove('is-movie', 'is-remux', 'is-catchup', 'on-demand');
+    this.el.classList.remove('is-movie', 'is-remux', 'is-catchup', 'on-demand', 'is-paused');
     this.statusEl.textContent = 'Loading…';
     this._startMpegts(`${location.origin}/api/stream/live/${streamId}`);
   }

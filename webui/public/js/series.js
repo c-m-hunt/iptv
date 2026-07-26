@@ -39,6 +39,7 @@ export class Series {
         <span class="films-count"></span>
         <button class="films-close" title="Close (V / Esc)">×</button>
       </div>
+      <div class="films-continue"></div>
       <div class="films-grid"></div>
       <div class="films-more"></div>
       <div class="films-detail"></div>`;
@@ -48,6 +49,7 @@ export class Series {
     this.sortEl = this.root.querySelector('.films-sort');
     this.countEl = this.root.querySelector('.films-count');
     this.gridEl = this.root.querySelector('.films-grid');
+    this.continueEl = this.root.querySelector('.films-continue');
     this.moreEl = this.root.querySelector('.films-more');
     this.detailEl = this.root.querySelector('.films-detail');
 
@@ -72,6 +74,55 @@ export class Series {
       if (e.target.closest('.films-more-btn')) this.load({ reset: false });
     });
     this.detailEl.addEventListener('click', (e) => this._onDetailClick(e));
+    this.continueEl.addEventListener('click', (e) => this._onContinueClick(e));
+  }
+
+  // -- continue watching (one card per show) -------------------------------
+  renderContinue() {
+    const filtering = !!this.searchEl.value.trim() || !!this.catEl.value;
+    const shows = this.history ? this.history.listShows() : [];
+    if (filtering || !shows.length) {
+      this.continueEl.innerHTML = '';
+      this.continueEl.classList.remove('open');
+      return;
+    }
+    this.continueEl.classList.add('open');
+    this.continueEl.innerHTML =
+      '<div class="cw-title">Continue watching</div><div class="cw-row">' +
+      shows.map(showCard).join('') +
+      '</div>';
+  }
+
+  _onContinueClick(e) {
+    const del = e.target.closest('[data-delshow]');
+    if (del) {
+      e.stopPropagation();
+      this.history.removeShow(Number(del.dataset.delshow));
+      this.renderContinue();
+      return;
+    }
+    const card = e.target.closest('.cw-card');
+    if (!card) return;
+    const entry = this.history.list().find(
+      (x) => String(x.id) === card.dataset.id && (x.type || 'movie') === 'episode'
+    );
+    if (!entry) return;
+    this.root.classList.remove('open');
+    this.onPlayEpisode?.(
+      {
+        id: entry.id,
+        type: 'episode',
+        title: entry.title,
+        showId: entry.showId,
+        showName: entry.showName,
+        showCover: entry.showCover,
+        season: entry.season,
+        episode: entry.episode,
+        poster: entry.poster,
+        durationSecs: entry.durationSecs,
+      },
+      { startAt: entry.finished ? 0 : entry.position || 0 }
+    );
   }
 
   // -- open/close ---------------------------------------------------------
@@ -83,6 +134,7 @@ export class Series {
     this.root.classList.add('open');
     if (!this._catsLoaded) this._loadCategories();
     if (!this.items.length) this.load({ reset: true });
+    this.renderContinue();
     requestAnimationFrame(() => this.searchEl.focus());
   }
 
@@ -121,6 +173,7 @@ export class Series {
       this.offset = 0;
       this.items = [];
       this.gridEl.innerHTML = '';
+      this.renderContinue(); // hides itself once a filter is active
     }
     const seq = ++this.seq;
     this.countEl.textContent = 'Loading…';
@@ -285,6 +338,7 @@ export class Series {
         season: ep.season,
         episode: ep.episode,
         poster: ep.still || show.cover,
+        showCover: show.cover,
         durationSecs: ep.durationSecs,
       });
     }
@@ -303,6 +357,34 @@ function stripPrefix(title, showName) {
     t = t.slice(showName.length).replace(/^\s*[-–—]\s*/, '');
   }
   return t.replace(/^S\d+E\d+\s*[-–—]\s*/i, '').trim() || String(title || '');
+}
+
+function showCard(e) {
+  const dur = e.durationSecs || 0;
+  const pct = dur ? Math.min(100, Math.round((e.position / dur) * 100)) : 0;
+  const code = `S${String(e.season ?? 0).padStart(2, '0')}E${String(e.episode ?? 0).padStart(
+    2,
+    '0'
+  )}`;
+  const sub = e.finished
+    ? `${code} · watched`
+    : dur
+      ? `${code} · ${fmtTime(dur - e.position)} left`
+      : `${code} · from ${fmtTime(e.position)}`;
+  const art = e.showCover || e.poster;
+  return (
+    `<div class="cw-card" data-id="${e.id}" title="${esc(
+      [e.showName, e.title].filter(Boolean).join(' — ')
+    )}">` +
+    (art
+      ? `<img loading="lazy" src="${esc(posterUrl(art))}" alt="" />`
+      : '<div class="film-noart">No artwork</div>') +
+    `<button class="cw-del" data-delshow="${e.showId}" title="Remove this series">×</button>` +
+    `<div class="cw-bar"><span style="width:${e.finished ? 100 : pct}%"></span></div>` +
+    `<div class="film-name">${esc(e.showName || e.title)}</div>` +
+    `<div class="film-sub">${esc(sub)}</div>` +
+    `</div>`
+  );
 }
 
 function cardHtml(s) {

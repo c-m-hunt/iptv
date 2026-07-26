@@ -16,10 +16,9 @@ const SORTS = [
 ];
 
 export class Films {
-  constructor(rootEl, { onPlay, onPlayEpisode, history }) {
+  constructor(rootEl, { onPlay, history }) {
     this.root = rootEl;
     this.onPlay = onPlay;
-    this.onPlayEpisode = onPlayEpisode;
     this.history = history;
     this.items = [];
     this.total = 0;
@@ -177,7 +176,11 @@ export class Films {
   // were watching, not a competitor to the results you asked for.
   renderContinue() {
     const filtering = !!this.searchEl.value.trim() || !!this.catEl.value;
-    const entries = this.history ? this.history.list() : [];
+    // Films only — part-watched episodes get their own row in the series
+    // browser, grouped by show rather than listed one episode at a time.
+    const entries = this.history
+      ? this.history.list().filter((e) => (e.type || 'movie') === 'movie')
+      : [];
     if (filtering || !entries.length) {
       this.continueEl.innerHTML = '';
       this.continueEl.classList.remove('open');
@@ -195,36 +198,14 @@ export class Films {
     const del = e.target.closest('[data-del]');
     if (del) {
       e.stopPropagation();
-      this.history.remove(Number(del.dataset.del), del.dataset.type || 'movie');
+      this.history.remove(Number(del.dataset.del), 'movie');
       this.renderContinue();
       return;
     }
     const card = e.target.closest('.cw-card');
     if (!card) return;
-    const type = card.dataset.type || 'movie';
-    const entry = this.history.get(Number(card.dataset.id), type);
+    const entry = this.history.get(Number(card.dataset.id), 'movie');
     if (!entry) return;
-
-    // Episodes go back through the series path, which re-probes the container
-    // (an episode entry doesn't carry one that's guaranteed still valid).
-    if (type === 'episode') {
-      this.root.classList.remove('open');
-      this.onPlayEpisode?.(
-        {
-          id: entry.id,
-          type: 'episode',
-          title: entry.title,
-          showId: entry.showId,
-          showName: entry.showName,
-          season: entry.season,
-          episode: entry.episode,
-          poster: entry.poster,
-          durationSecs: entry.durationSecs,
-        },
-        { startAt: entry.finished ? 0 : entry.position || 0 }
-      );
-      return;
-    }
     // The entry carries everything playback needs, so resuming skips the
     // container probe entirely.
     this.root.classList.remove('open');
@@ -362,31 +343,19 @@ function continueCard(e) {
   const dur = e.durationSecs || 0;
   const pct = dur ? Math.min(100, Math.round((e.position / dur) * 100)) : 0;
   const left = dur ? dur - e.position : 0;
-  const type = e.type || 'movie';
   const sub = e.finished
     ? 'Watched'
     : dur
       ? `${fmtTime(left)} left`
       : `from ${fmtTime(e.position)}`;
-  // An episode is identified by its show and number, not its own title.
-  const heading =
-    type === 'episode' && e.showName
-      ? `${e.showName} · S${String(e.season ?? 0).padStart(2, '0')}E${String(
-          e.episode ?? 0
-        ).padStart(2, '0')}`
-      : e.title;
   return (
-    `<div class="cw-card" data-id="${e.id}" data-type="${esc(type)}" title="${esc(
-      [e.showName, e.title].filter(Boolean).join(' — ')
-    )}">` +
+    `<div class="cw-card" data-id="${e.id}" title="${esc(e.title)}">` +
     (e.poster
       ? `<img loading="lazy" src="${esc(posterUrl(e.poster))}" alt="" />`
       : '<div class="film-noart">No artwork</div>') +
-    `<button class="cw-del" data-del="${e.id}" data-type="${esc(
-      type
-    )}" title="Remove from continue watching">×</button>` +
+    `<button class="cw-del" data-del="${e.id}" title="Remove from continue watching">×</button>` +
     `<div class="cw-bar"><span style="width:${e.finished ? 100 : pct}%"></span></div>` +
-    `<div class="film-name">${esc(heading)}</div>` +
+    `<div class="film-name">${esc(e.title)}</div>` +
     `<div class="film-sub">${esc(sub)}</div>` +
     `</div>`
   );
