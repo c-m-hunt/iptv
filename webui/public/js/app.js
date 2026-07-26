@@ -27,7 +27,6 @@ class App {
     this.films = new Films(document.getElementById('films'), {
       history: this.history,
       onPlay: (film, playback, opts) => this.playMovie(film, playback, opts),
-      onPlayEpisode: (episode, opts) => this.playEpisode(episode, opts),
     });
 
     this.catchup = new Catchup(document.getElementById('catchup'), {
@@ -41,7 +40,10 @@ class App {
     // A closing tab gets no timeupdate, so flush the resume point on the way out.
     window.addEventListener('pagehide', () => this.players.forEach((p) => p.saveProgress()));
     this._awaitingSave = false;
-    this._lastKey = 'iptv-last-setup-v1';
+    // v2: entries gained `type`. A v1 entry saved while an episode was playing
+    // is indistinguishable from a film, and restoring it as one 502s — so drop
+    // the old key rather than guess.
+    this._lastKey = 'iptv-last-setup-v2';
     this._canUnmute = false; // becomes true after the first user gesture
 
     this.players = [];
@@ -258,11 +260,14 @@ class App {
     this._wakeToolbar = () => {
       this.toolbar.classList.remove('faded');
       this.handleEl.classList.remove('faded');
+      // Film/catch-up transport bars follow the same idle timer (see CSS).
+      document.body.classList.remove('chrome-idle');
       clearTimeout(idle);
       if (!this._pinned) {
         idle = setTimeout(() => {
           this.toolbar.classList.add('faded');
           this.handleEl.classList.add('faded');
+          document.body.classList.add('chrome-idle');
         }, 4000);
       }
     };
@@ -433,9 +438,28 @@ class App {
               name: p.channel.name,
               kind: p.channel.kind || 'live',
               // Films remember how they were played so a restored setup doesn't
-              // have to re-probe the container before it can start.
+              // have to re-probe the container before it can start. Episodes
+              // must also remember they ARE episodes — they stream from a
+              // different path, and restoring one as a film 502s.
               ...(p.channel.kind === 'movie'
-                ? { mode: p.channel.mode, durationSecs: p.channel.durationSecs }
+                ? {
+                    mode: p.channel.mode,
+                    durationSecs: p.channel.durationSecs,
+                    type: p.channel.type || 'movie',
+                    showId: p.channel.showId,
+                    showName: p.channel.showName,
+                    showCover: p.channel.showCover,
+                    season: p.channel.season,
+                    episode: p.channel.episode,
+                  }
+                : {}),
+              // A catch-up programme is a channel plus a window in time.
+              ...(p.channel.kind === 'catchup'
+                ? {
+                    start: p.channel.start,
+                    durationSecs: p.channel.durationSecs,
+                    channelName: p.channel.channelName,
+                  }
                 : {}),
             }
           : null
@@ -457,15 +481,35 @@ class App {
       if (!p || !ch) return;
       const same = p.channel && p.channel.id === ch.id && (p.channel.kind || 'live') === (ch.kind || 'live');
       if (same) p.closeSearch();
-      else if (ch.kind === 'movie')
-        // Pick the film up where it was left, not at the start — otherwise
-        // restoring a setup would replay from zero and overwrite the very
-        // resume point we saved.
+      else if (ch.kind === 'movie') {
+        // Pick it up where it was left, not at the start — otherwise restoring
+        // a setup would replay from zero and overwrite the very resume point we
+        // saved.
+        const type = ch.type || 'movie';
         p.setMovie(
-          { id: ch.id, name: ch.name, title: ch.name, durationSecs: ch.durationSecs },
+          {
+            id: ch.id,
+            name: ch.name,
+            title: ch.name,
+            durationSecs: ch.durationSecs,
+            type,
+            showId: ch.showId,
+            showName: ch.showName,
+            showCover: ch.showCover,
+            season: ch.season,
+            episode: ch.episode,
+          },
           { mode: ch.mode },
-          { startAt: this.history.resumeAt(ch.id) }
+          { startAt: this.history.resumeAt(ch.id, type) }
         );
+      } else if (ch.kind === 'catchup')
+        p.setCatchup({
+          channelId: ch.id,
+          channelName: ch.channelName,
+          title: ch.name,
+          start: ch.start,
+          durationSecs: ch.durationSecs,
+        });
       else p.setChannel(ch);
     });
 
