@@ -142,6 +142,13 @@ the desktop uses — the phone is on the same server — so a picker is UI only 
 adds nothing server-side.
 
 Two things worth knowing:
+* **Escape belongs to the browser in fullscreen.** Opening a browse overlay in
+  fullscreen and pressing Esc used to drop out of fullscreen with the overlay
+  still up. `_onFullscreenChange()` calls `navigator.keyboard.lock(['Escape'])`
+  on entering fullscreen so Esc reaches the page and closes the overlay instead;
+  holding Esc still exits. Safari and Firefox have no Keyboard Lock, so there the
+  first Esc exits fullscreen and `cancelTransient()` runs on the way out, closing
+  the overlay too.
 * **Fullscreen can't be entered remotely.** `requestFullscreen()` needs transient
   user activation, and a network message isn't one — verified: it throws
   "Permissions check failed". `exitFullscreen()` *is* allowed, so the remote can

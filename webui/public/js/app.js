@@ -241,6 +241,27 @@ class App {
     }
   }
 
+  // In fullscreen the browser claims Escape for itself, so opening the films,
+  // series or catch-up browser and pressing Esc dropped you out of fullscreen
+  // with the overlay still up — the wrong one of the two closed.
+  //
+  // Keyboard Lock (Chrome, Edge) hands Escape to the page instead, so Esc closes
+  // the overlay and fullscreen survives; holding Esc still exits, which is the
+  // browser's own escape hatch and can't be taken away.
+  _onFullscreenChange(on) {
+    if (on) {
+      navigator.keyboard?.lock?.(['Escape']).catch(() => {
+        /* not permitted here — the fallback below covers it */
+      });
+      return;
+    }
+    navigator.keyboard?.unlock?.();
+    // Without Keyboard Lock (Safari, Firefox) that first Escape always exits
+    // fullscreen. Close whatever was open as well, so one press gets you back to
+    // watching instead of stranding the overlay on screen.
+    if (!navigator.keyboard?.lock) this.cancelTransient();
+  }
+
   // Leaving fullscreen needs no user gesture, so a remote can do this even
   // though it can never put the page *into* fullscreen.
   exitFullscreen() {
@@ -256,6 +277,7 @@ class App {
     const syncFs = () => {
       const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
       fsBtn.textContent = on ? '⛶ Exit fullscreen' : '⛶ Fullscreen';
+      this._onFullscreenChange(on);
     };
     document.addEventListener('fullscreenchange', syncFs);
     document.addEventListener('webkitfullscreenchange', syncFs);

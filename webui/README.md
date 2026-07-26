@@ -98,6 +98,7 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 | `R` | Remote-control QR for this screen |
 | `V` | Toggle the series browser |
 | `T` | Toggle the catch-up guide |
+| `Esc` | Close the open browser/guide/panel — stays in fullscreen (hold `Esc` to leave fullscreen) |
 | `?` | Toggle the help panel |
 
 Only the **focused** player plays audio (click a player or press its number to
