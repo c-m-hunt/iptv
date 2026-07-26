@@ -38,6 +38,13 @@
         </div>
       </section>
 
+      <!-- Directly under what's playing: this is the first thing you reach for
+           when you sit down, so it shouldn't be below three other cards. -->
+      <section class="card" id="continue-card" hidden>
+        <div class="label">Continue watching</div>
+        <div id="continue"></div>
+      </section>
+
       <section class="card">
         <div class="label">Volume <span id="vol-val" class="muted"></span></div>
         <input id="vol" class="seek" type="range" min="0" max="100" value="100" />
@@ -63,11 +70,6 @@
         </div>
         <div class="label">Split</div>
         <input id="split" class="seek" type="range" min="10" max="90" value="50" />
-      </section>
-
-      <section class="card" id="continue-card" hidden>
-        <div class="label">Continue watching</div>
-        <div id="continue"></div>
       </section>
 
       <section class="card" id="presets-card">

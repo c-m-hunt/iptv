@@ -21,7 +21,6 @@
 //   GET /api/stream/catchup/:id?start=&duration= -> proxied archive stream
 //   GET /api/poster?u=           -> proxied poster image
 //   GET /api/remote/pair?session= -> { url, qrSvg, alternatives } for the phone
-//   GET /api/remote/screens      -> live screens available to control
 //   GET /remote                  -> phone remote-control UI (no video)
 //   WS  /ws/screen?s= , /ws/remote?s=&t= -> relay
 //   GET /api/refresh             -> force-refresh catalogue cache
@@ -29,6 +28,7 @@
 
 require('./env'); // load .env into process.env before anything reads it
 const path = require('path');
+const dns = require('dns').promises;
 const express = require('express');
 const iptv = require('./iptv');
 const vod = require('./vod');
@@ -43,6 +43,52 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 const app = express();
 app.disable('x-powered-by');
+
+// Is this hostname somewhere on the public internet, rather than this machine or
+// the local network? Checked by resolving it, so a public name pointed at a
+// private address is caught too. (A name that changes its answer between this
+// check and the fetch could still slip through — closing that would mean pinning
+// the resolved address, which is more machinery than home artwork warrants.)
+const PRIVATE_V4 =
+  /^(0\.|10\.|127\.|169\.254\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|172\.(1[6-9]|2\d|3[01])\.)/;
+
+// Small in-memory poster cache, bounded by bytes rather than count because
+// artwork varies from a few KB to a few hundred. Oldest out first.
+const POSTER_CACHE_BYTES = Number(process.env.POSTER_CACHE_MB || 32) * 1024 * 1024;
+const posterCache = new Map();
+let posterCacheBytes = 0;
+
+function cachePoster(key, type, body) {
+  if (body.length > POSTER_CACHE_BYTES) return;
+  posterCache.set(key, { type, body });
+  posterCacheBytes += body.length;
+  while (posterCacheBytes > POSTER_CACHE_BYTES && posterCache.size) {
+    const oldest = posterCache.keys().next().value;
+    posterCacheBytes -= posterCache.get(oldest).body.length;
+    posterCache.delete(oldest);
+  }
+}
+
+async function isPublicHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  if (!host || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) {
+    return false;
+  }
+  const isPrivateAddr = (addr) =>
+    PRIVATE_V4.test(addr) ||
+    addr === '::1' ||
+    addr === '::' ||
+    /^f[cd]/i.test(addr) || // unique local
+    /^fe80:/i.test(addr); // link local
+
+  if (/^[\d.]+$/.test(host) || host.includes(':')) return !isPrivateAddr(host);
+  try {
+    const results = await dns.lookup(host, { all: true });
+    return results.length > 0 && !results.some((r) => isPrivateAddr(r.address));
+  } catch {
+    return false; // can't resolve it, don't fetch it
+  }
+}
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, credentials: iptv.hasCredentials() });
@@ -277,17 +323,46 @@ app.get('/api/poster', async (req, res) => {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return res.status(400).json({ error: 'unsupported protocol' });
   }
-  try {
-    const up = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (!up.ok) return res.status(502).end();
-    const type = up.headers.get('content-type') || '';
-    if (!type.startsWith('image/')) return res.status(415).end();
-    res.setHeader('Content-Type', type);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.send(Buffer.from(await up.arrayBuffer()));
-  } catch {
-    res.status(502).end();
+  // Artwork lives on public CDNs. Without this check the endpoint is an open
+  // proxy: anything on the LAN could aim it at internal hosts and use the
+  // server to probe them, since a reachable-but-not-an-image host answers
+  // differently from an unreachable one.
+  if (!(await isPublicHost(url.hostname))) {
+    return res.status(403).json({ error: 'only public hosts can be proxied' });
   }
+  const key = url.toString();
+  const hit = posterCache.get(key);
+  if (hit) {
+    res.setHeader('Content-Type', hit.type);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(hit.body);
+  }
+
+  // The provider's CDN truncates responses mid-body under load — measured
+  // repeatedly, including on direct fetches that bypass this server. One retry
+  // turns most of those into a hit, and caching means a poster that did arrive
+  // is never asked for twice.
+  let lastStatus = 502;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const up = await fetch(url, { signal: AbortSignal.timeout(12000) });
+      if (!up.ok) {
+        lastStatus = 502;
+        continue;
+      }
+      const type = up.headers.get('content-type') || '';
+      if (!type.startsWith('image/')) return res.status(415).end();
+      const body = Buffer.from(await up.arrayBuffer());
+      if (!body.length) continue; // truncated to nothing; try again
+      cachePoster(key, type, body);
+      res.setHeader('Content-Type', type);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(body);
+    } catch {
+      lastStatus = 502; // timeout or a connection dropped mid-body
+    }
+  }
+  res.status(lastStatus).end();
 });
 
 app.get('/api/refresh', async (req, res) => {
@@ -304,10 +379,6 @@ app.get('/api/refresh', async (req, res) => {
 app.get('/api/remote/pair', (req, res) => remote.pair(req, res, PORT));
 
 app.get('/api/remote/qr', (req, res) => remote.qrFor(req, res));
-
-app.get('/api/remote/screens', (req, res) => {
-  res.json({ screens: remote.screenList() });
-});
 
 app.get('/remote', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'remote', 'index.html'));

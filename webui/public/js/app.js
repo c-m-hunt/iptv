@@ -374,7 +374,7 @@ class App {
   _wireFullscreenGestures() {
     this.stage.addEventListener('dblclick', (e) => {
       // Ignore double-clicks on the search overlay, drag handle, or panels.
-      if (e.target.closest('.search, #handle, .corner-panel, #films, #profile, #presets')) return;
+      if (e.target.closest('.search, #handle, #films, #series, #catchup, #profile, #presets, #remote-pair')) return;
       if (this.players.some((p) => p.el.classList.contains('searching'))) return;
       this.toggleFullscreen();
     });

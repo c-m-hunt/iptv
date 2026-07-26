@@ -2,7 +2,7 @@
 //
 // split = { x, y } as fractions in (0,1). Returns rectangles in PERCENT units
 // ({ x, y, w, h }) plus the handle position and which corners are free for the
-// World Cup panels.
+// overlay panels.
 
 export const MODES = ['horizontal', 'diag-tlbr', 'diag-bltr'];
 

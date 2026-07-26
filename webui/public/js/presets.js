@@ -2,7 +2,7 @@
 // slide-in panel from the right edge.
 //
 // A preset captures: channels (per player), split dimensions, layout mode, the
-// focused/sound player, and whether the World Cup live panels are on.
+// focused/sound player.
 
 const STORE_KEY = 'iptv-presets-v1';
 const SLOTS = 9;
@@ -159,7 +159,6 @@ function metaFor(p) {
   const n = (p.channels || []).filter(Boolean).length;
   const bits = [n < 2 ? 'single' : LAYOUT_LABELS[p.layoutMode] || p.layoutMode];
   if (n === 2) bits.push('🔊 P' + (p.focusedNum || 1));
-  if (p.live) bits.push('live');
   return bits.join(' · ');
 }
 

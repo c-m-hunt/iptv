@@ -329,6 +329,50 @@ el('continue').addEventListener('click', (e) => {
   resume(entry);
 });
 
+// Part-watched items for a browse tab: films on the film tab, and one card per
+// show on the series tab — the same split the main screen uses. Shown only with
+// no search active, so it never competes with results you asked for.
+function historyFor(kind) {
+  const all = state?.history || [];
+  if (kind === 'films') return all.filter((e) => (e.type || 'movie') === 'movie');
+  if (kind !== 'series') return [];
+  const byShow = new Map();
+  for (const e of all) {
+    if (e.type !== 'episode') continue;
+    const key = e.showName ?? e.id;
+    if (!byShow.has(key)) byShow.set(key, e); // history arrives newest first
+  }
+  return [...byShow.values()];
+}
+
+function continueSection(kind) {
+  const list = historyFor(kind);
+  if (!list.length) return '';
+  browseResume = list;
+  const rows = list
+    .map((e, i) => {
+      const name =
+        e.type === 'episode' && e.showName
+          ? `${e.showName} · S${pad(e.season)}E${pad(e.episode)}`
+          : e.title;
+      const sub = e.finished
+        ? 'Watched'
+        : e.durationSecs
+          ? `${fmt(e.durationSecs - e.position)} left`
+          : fmt(e.position);
+      return (
+        `<button class="rowitem" data-resume-browse="${i}">` +
+        thumb(e.showCover || e.poster) +
+        `<span class="ri-body"><span class="ri-title">${escapeHtml(name)}</span>` +
+        `<span class="ri-sub">${escapeHtml(sub)}</span></span></button>`
+      );
+    })
+    .join('');
+  return `<div class="label">Continue watching</div>${rows}<div class="label">All ${kind}</div>`;
+}
+
+let browseResume = [];
+
 function resume(entry) {
   const startAt = entry.finished ? 0 : entry.position || 0;
   if (entry.type === 'episode') {
@@ -451,7 +495,8 @@ async function load({ append = false } = {}) {
       if (append) {
         resultsEl.querySelector('.grid')?.insertAdjacentHTML('beforeend', html);
       } else {
-        resultsEl.innerHTML = `<div class="grid">${html}</div>`;
+        const resumeRows = q ? '' : continueSection(kind);
+        resultsEl.innerHTML = `${resumeRows}<div class="grid">${html}</div>`;
       }
       moreEl.innerHTML =
         browseState.items.length < browseState.total
@@ -490,6 +535,13 @@ moreEl.addEventListener('click', (e) => {
 });
 
 resultsEl.addEventListener('click', async (e) => {
+  const res = e.target.closest('[data-resume-browse]');
+  if (res) {
+    const entry = browseResume[Number(res.dataset.resumeBrowse)];
+    if (entry) resume(entry);
+    return;
+  }
+
   const play = e.target.closest('[data-play]');
   if (play) {
     const c = browseState.items[Number(play.dataset.play)];
