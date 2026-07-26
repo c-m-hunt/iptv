@@ -143,7 +143,10 @@ body {
   -webkit-user-select: none;
 }
 
-.player:hover .vol-overlay {
+/* Same reasoning as the transport bar: hover alone would keep this up forever,
+   since the tile fills the screen. Hover decides *which* tile shows it, the
+   idle timer decides whether any of them do. */
+body:not(.chrome-idle) .player:hover .vol-overlay {
   opacity: 1;
   pointer-events: auto;
 }
@@ -1174,6 +1177,8 @@ body {
   padding: 10px 14px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
   opacity: 0;
+  /* While hidden it must not swallow clicks meant for the video. */
+  pointer-events: none;
   transition: opacity 0.2s ease;
 }
 
@@ -1181,14 +1186,15 @@ body {
   display: flex;
 }
 
-/* Visible on hover, and on the focused tile while the chrome is awake — the
-   same idle timer that fades the control bar. Without the idle rule the bar sat
-   permanently over the picture, because a single tile is always focused.
-   A paused film keeps its controls: that's when you want them. */
-.player.on-demand:hover .film-bar,
+/* Shown on the focused tile while the chrome is awake — the same idle timer
+   that fades the control bar — and always while paused, since that's when you
+   want the controls. Deliberately NOT keyed on :hover: the tile fills the
+   screen, so the pointer is almost always over it and the bar would never
+   hide. Any mouse movement wakes it, including moving towards it. */
 .player.on-demand.is-paused .film-bar,
 body:not(.chrome-idle) .player.on-demand.focused .film-bar {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .fb-play {
