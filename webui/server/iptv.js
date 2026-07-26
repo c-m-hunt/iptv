@@ -377,6 +377,7 @@ module.exports = {
   resolveCredentials,
   apiUrl,
   proxyFrom,
+  loadCatalogue,
   getChannels,
   getAccount,
   refreshCatalogue,

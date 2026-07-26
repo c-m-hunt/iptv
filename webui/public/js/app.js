@@ -5,6 +5,7 @@ import { Presets } from './presets.js';
 import { Profile } from './profile.js';
 import { Films } from './films.js';
 import { WatchHistory } from './history.js';
+import { Catchup } from './catchup.js';
 import { computeLayout, clampSplit, MODES, MODE_LABELS } from './layout.js';
 import { installShortcuts } from './shortcuts.js';
 
@@ -25,6 +26,10 @@ class App {
     this.films = new Films(document.getElementById('films'), {
       history: this.history,
       onPlay: (film, playback, opts) => this.playMovie(film, playback, opts),
+    });
+
+    this.catchup = new Catchup(document.getElementById('catchup'), {
+      onPlay: (programme) => this.playCatchup(programme),
     });
 
     // A closing tab gets no timeupdate, so flush the resume point on the way out.
@@ -108,11 +113,15 @@ class App {
     this._scheduleSaveLast();
   }
 
+  // This is also the way back to live from a film or a catch-up programme.
+  // Only prefill from a live channel: seeding the box with a film title would
+  // search the live catalogue for it and turn up nothing.
   openSearchFor(num) {
     const p = this.players.find((x) => x.num === num);
     if (!p) return;
     this.focusPlayer(num);
-    p.openSearch(p.channel ? p.channel.name : '');
+    const live = p.channel && (p.channel.kind || 'live') === 'live';
+    p.openSearch(live ? p.channel.name : '');
   }
 
   // -- layout -------------------------------------------------------------
@@ -219,7 +228,11 @@ class App {
     document.getElementById('btn-swap').addEventListener('click', () => this.swapPlayers());
     document.getElementById('btn-layout').addEventListener('click', () => this.cycleLayout());
     document.getElementById('btn-profile').addEventListener('click', () => this.toggleProfile());
+    document
+      .getElementById('btn-live')
+      .addEventListener('click', () => this.openSearchFor(this.focusedNum));
     document.getElementById('btn-films').addEventListener('click', () => this.toggleFilms());
+    document.getElementById('btn-catchup').addEventListener('click', () => this.toggleCatchup());
     document.getElementById('btn-help').addEventListener('click', () => this.toggleHelp());
 
     // First user gesture unlocks audio: unmute the focused player.
@@ -334,6 +347,18 @@ class App {
 
   toggleFilms() {
     this.films.toggle();
+  }
+
+  toggleCatchup() {
+    this.catchup.toggle();
+  }
+
+  playCatchup(programme) {
+    const p = this.players.find((x) => x.num === this.focusedNum) || this.players[0];
+    if (!p) return;
+    p.setCatchup(programme);
+    this.toast(`${programme.title} — ${cleanChannel(programme.channelName)}`);
+    this._scheduleSaveLast();
   }
 
   // Films load into the focused player, so a film can sit alongside live TV in
@@ -489,6 +514,10 @@ class App {
       this.films.close(); // closes the detail view first, if one is up
       did = true;
     }
+    if (this.catchup.isOpen()) {
+      this.catchup.close();
+      did = true;
+    }
     return did;
   }
 
@@ -499,6 +528,10 @@ class App {
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => el.classList.remove('show'), ms);
   }
+}
+
+function cleanChannel(n) {
+  return String(n || '').replace(/\s*\|.*$/, '').trim();
 }
 
 function fmtClock(seconds) {

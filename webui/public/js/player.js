@@ -52,7 +52,7 @@ export class Player {
     // Film transport. Remuxed films have no seekable timeline of their own —
     // seeking restarts the ffmpeg stream at an offset — so both film modes get
     // the same bar rather than native controls that would behave differently.
-    this._remuxOffset = 0;
+    this._playOffset = 0;
     this._scrubbing = false;
     this.fbPlay.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -163,18 +163,40 @@ export class Player {
     this.kind = 'movie';
     this._errorCount = 0;
     this._stuckReloads = 0;
-    this._remuxOffset = 0;
+    this._playOffset = 0;
     this._lastReport = 0;
     this.closeSearch();
     this._updateBadge();
     this._loadMovie(this.channel.id, startAt);
   }
 
+  // Play a past programme from a catch-up channel.
+  setCatchup(programme, { startAt = 0 } = {}) {
+    this.saveProgress();
+    this.channel = {
+      id: programme.channelId,
+      name: programme.title,
+      channelName: programme.channelName || '',
+      kind: 'catchup',
+      start: programme.start,
+      durationSecs: programme.durationSecs || (programme.durationMins || 0) * 60,
+    };
+    this.kind = 'catchup';
+    this._errorCount = 0;
+    this._stuckReloads = 0;
+    this._playOffset = 0;
+    this._lastReport = 0;
+    this.closeSearch();
+    this._updateBadge();
+    this._loadCatchup(startAt);
+  }
+
   _loadMovie(id, offset = 0) {
     this._destroyMp();
-    this._remuxOffset = offset;
+    this._playOffset = offset;
     const remux = this.channel?.mode === 'remux';
-    this.el.classList.add('is-loading', 'is-movie');
+    this.el.classList.add('is-loading', 'is-movie', 'on-demand');
+    this.el.classList.remove('is-catchup');
     this.el.classList.toggle('is-remux', remux);
     this.el.classList.remove('is-error');
     this.statusEl.textContent = remux ? 'Remuxing…' : 'Loading film…';
@@ -229,22 +251,30 @@ export class Player {
     this._syncFilmBar();
   }
 
-  // -- film transport ------------------------------------------------------
-  // Films only: a paused live stream drifts behind and _applyMute() resumes it
-  // again on the next focus or volume change.
+  // -- on-demand transport --------------------------------------------------
+  // Films and catch-up programmes. Not live: a paused live stream drifts behind
+  // and _applyMute() resumes it again on the next focus or volume change.
+  isOnDemand() {
+    return this.kind === 'movie' || this.kind === 'catchup';
+  }
+
   togglePlay() {
-    if (this.kind !== 'movie') return false;
+    if (!this.isOnDemand()) return false;
     if (this.video.paused) this.video.play()?.catch(() => {});
     else this.video.pause();
     this._syncFilmBar();
     return true;
   }
 
-  // Total runtime comes from the film's metadata; for a direct stream the
-  // element's own duration is better, but a remuxed stream doesn't have one.
+  // Only a direct MP4 knows its own length. A remuxed film and a catch-up
+  // programme are both piped streams, so their runtime comes from metadata.
+  _isPipedStream() {
+    return this.kind === 'catchup' || this.channel?.mode === 'remux';
+  }
+
   _filmDuration() {
     const v = this.video;
-    if (this.channel?.mode !== 'remux' && Number.isFinite(v.duration) && v.duration > 0) {
+    if (!this._isPipedStream() && Number.isFinite(v.duration) && v.duration > 0) {
       return v.duration;
     }
     return this.channel?.durationSecs || 0;
@@ -252,11 +282,11 @@ export class Player {
 
   _filmPosition() {
     const t = this.video.currentTime || 0;
-    return this.channel?.mode === 'remux' ? this._remuxOffset + t : t;
+    return this._isPipedStream() ? (this._playOffset || 0) + t : t;
   }
 
   _syncFilmBar() {
-    if (this.kind !== 'movie') return;
+    if (!this.isOnDemand()) return;
     this.fbPlay.textContent = this.video.paused ? '▶' : '⏸';
     if (this._scrubbing) return;
     const dur = this._filmDuration();
@@ -288,10 +318,13 @@ export class Player {
   }
 
   _seekFilm(seconds) {
-    if (this.kind !== 'movie') return;
+    if (!this.isOnDemand()) return;
     const dur = this._filmDuration();
     const target = Math.max(0, Math.min(seconds, dur ? dur - 1 : seconds));
-    if (this.channel.mode === 'remux') {
+    if (this.kind === 'catchup') {
+      // Ask the portal for the programme from a later point.
+      this._loadCatchup(target);
+    } else if (this.channel.mode === 'remux') {
       // No byte ranges to seek within — restart ffmpeg at the new offset. The
       // old process dies when the browser drops the previous request.
       this._loadMovie(this.channel.id, target);
@@ -305,16 +338,36 @@ export class Player {
   }
 
   _loadStream(streamId) {
+    this.el.classList.remove('is-movie', 'is-remux', 'is-catchup', 'on-demand');
+    this.statusEl.textContent = 'Loading…';
+    this._startMpegts(`${location.origin}/api/stream/live/${streamId}`);
+  }
+
+  // Catch-up is MPEG-TS like live, but finite: the portal serves a programme
+  // from `start` for `duration` minutes. Seeking asks for a later start, the
+  // same trick the remuxed films use.
+  _loadCatchup(offset = 0) {
+    const c = this.channel;
+    const remainingMins = Math.max(1, Math.ceil((c.durationSecs - offset) / 60));
+    this._playOffset = offset;
+    this.el.classList.remove('is-movie', 'is-remux');
+    this.el.classList.add('is-catchup', 'on-demand');
+    this.statusEl.textContent = 'Loading programme…';
+    this._startMpegts(
+      `${location.origin}/api/stream/catchup/${c.id}` +
+        `?start=${Math.floor(c.start + offset)}&duration=${remainingMins}`
+    );
+  }
+
+  _startMpegts(url) {
     this._destroyMp();
     // Coming back from a film: drop the native source and controls, or mpegts
     // would be attaching to an element that's still playing an MP4.
     this.video.removeAttribute('src');
     this.video.controls = false;
     this.video.load();
-    this.el.classList.remove('is-movie', 'is-remux');
     this.el.classList.add('is-loading');
     this.el.classList.remove('is-error');
-    this.statusEl.textContent = 'Loading…';
     this._lastTime = 0;
     this._lastProgressAt = Date.now();
     this._loadStartedAt = Date.now();
@@ -328,7 +381,7 @@ export class Player {
     const mp = window.mpegts.createPlayer(
       // Absolute URL: with enableWorker the fetch runs in a worker whose base
       // is a blob: URL, so a relative path can't be resolved.
-      { type: 'mpegts', isLive: true, url: `${location.origin}/api/stream/live/${streamId}` },
+      { type: 'mpegts', isLive: true, url },
       {
         // Tuned for SMOOTH playback over low latency (VLC-like). The defaults
         // here were previously latency-optimised, which caused stutter.
@@ -376,9 +429,9 @@ export class Player {
   // Watchdog: a live stream that freezes often emits no error — currentTime
   // just stops advancing. Detect that and restart the stream.
   _tick() {
-    // Films are on-demand: pausing and seeking are normal, and a restart would
-    // throw the viewer back to the start. The watchdog is for live only.
-    if (this.kind === 'movie') return;
+    // Films and catch-up are on-demand: pausing and seeking are normal, and a
+    // restart would throw the viewer back to the start. Watchdog is live only.
+    if (this.kind !== 'live') return;
     if (!this.channel || !this.mp) return;
     const v = this.video;
     const now = Date.now();
@@ -487,9 +540,9 @@ export class Player {
     this.video.muted = this.muted;
     this.video.volume = this.volume;
     // Ensure the element is actually playing (muted autoplay is always allowed;
-    // a previous unmute attempt may have left it paused). Never for a film —
-    // the viewer may have paused it deliberately.
-    if (this.video.paused && this.kind !== 'movie') {
+    // a previous unmute attempt may have left it paused). Live only — on demand,
+    // the viewer may have paused deliberately.
+    if (this.video.paused && this.kind === 'live') {
       const p = this.video.play?.();
       if (p && p.catch) p.catch(() => {});
     }

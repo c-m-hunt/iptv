@@ -88,6 +88,12 @@ export function installShortcuts(app) {
         app.toggleFilms();
         break;
 
+      case 't':
+      case 'T':
+        e.preventDefault();
+        app.toggleCatchup();
+        break;
+
       case 's':
       case 'S':
         e.preventDefault();

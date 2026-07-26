@@ -34,6 +34,7 @@ webui/
     iptv.js        Credentials, catalogue fetch/cache, stream proxy
     vod.js         Film catalogue: fetch/cache, search, detail, container probe
     remux.js       ffmpeg container swap for MKV/AVI films (fMP4 on stdout)
+    catchup.js     Archive-capable channels, their EPG, timeshift URLs
   public/          Static frontend (ES modules, no bundler)
     js/
       app.js       App class — orchestrates all state, layout, players, controls
@@ -44,6 +45,7 @@ webui/
       profile.js   Profile — account/subscription panel (expiry, connections)
       films.js     Films — browse/search overlay, detail view, play
       history.js   WatchHistory — recently played films + resume points
+      catchup.js   Catch Up — channel list + EPG guide for the last 5–14 days
       shortcuts.js Global keyboard handler — delegates to App methods
     css/styles.css Single stylesheet for everything
 ```
@@ -81,6 +83,20 @@ offer a timeline that can't work for a remuxed stream). Runtime comes from
 Every live ffmpeg holds one of the account's limited connections, so the process
 is SIGKILLed as soon as the client disconnects.
 
+**Catch-up TV**: 137 of ~8,500 live channels carry `tv_archive` with 5–14 days
+of history (mostly the UK terrestrials). `get_simple_data_table&stream_id=`
+returns that channel's EPG with base64 title/description and a `has_archive`
+flag; the server filters to programmes that have finished and are still inside
+the window. Playback is `/streaming/timeshift.php?start=&duration=`, which
+returns MPEG-TS — so catch-up goes through mpegts.js like live, not the film
+path. Seeking asks for a later `start`, the same restart trick the remuxed films
+use, and `Player` shares one transport bar across all on-demand modes
+(`.player.on-demand`).
+
+Times in timeshift URLs are in the **portal's** timezone, taken from
+`server_info.timezone`, never the server's local zone — in Docker that's UTC and
+you'd silently fetch the wrong hour.
+
 **Continue watching**: `Player` reports its position every 5s (and on pause,
 film swap, destroy and `pagehide`) to `WatchHistory`, which keeps the last 30
 films in localStorage. Entries store the playback mode and runtime as well as
@@ -104,4 +120,4 @@ at 0 would replay from the start and overwrite the saved point.
 
 ### Keyboard shortcuts
 
-`Space` pause/resume film · `F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `M` films · `?` help
+`Space` pause/resume film · `F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `M` films · `T` catch-up · `?` help

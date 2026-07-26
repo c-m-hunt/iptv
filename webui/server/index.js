@@ -11,6 +11,9 @@
 //   GET /api/movies/:id/playback -> { container, playable, reason, size }
 //   GET /api/stream/movie/:id    -> proxied film (byte-range capable)
 //   GET /api/stream/movie/:id/remux?t= -> MKV/AVI remuxed to fMP4 via ffmpeg
+//   GET /api/catchup/channels    -> archive-capable channels
+//   GET /api/catchup/:id/epg     -> programmes still inside the archive window
+//   GET /api/stream/catchup/:id?start=&duration= -> proxied archive stream
 //   GET /api/poster?u=           -> proxied poster image
 //   GET /api/refresh             -> force-refresh catalogue cache
 //   /                            -> static frontend (../public)
@@ -21,6 +24,7 @@ const express = require('express');
 const iptv = require('./iptv');
 const vod = require('./vod');
 const remux = require('./remux');
+const catchup = require('./catchup');
 
 const PORT = Number(process.env.PORT || 8090);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -138,6 +142,40 @@ app.get('/api/stream/movie/:id(\\d+)', (req, res) => {
     iptv.proxyFrom(vod.movieUrl(req.params.id, req.query.ext || 'vod'), req, res);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// -- catch-up TV ------------------------------------------------------------
+app.get('/api/catchup/channels', async (req, res) => {
+  try {
+    res.json(await catchup.getChannels({ q: req.query.q || '', force: req.query.force === '1' }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/catchup/:id(\\d+)/epg', async (req, res) => {
+  try {
+    res.json(await catchup.getEpg(req.params.id, { force: req.query.force === '1' }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// `start` is a unix timestamp, `duration` is in minutes. Seeking within a
+// programme re-requests with a later start.
+app.get('/api/stream/catchup/:id(\\d+)', async (req, res) => {
+  const start = Number(req.query.start);
+  const duration = Number(req.query.duration);
+  if (!start || !duration) {
+    return res.status(400).json({ error: 'start and duration are required' });
+  }
+  try {
+    const url = await catchup.archiveUrl(req.params.id, start, duration);
+    iptv.proxyFrom(url, req, res);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    else res.end();
   }
 });
 
