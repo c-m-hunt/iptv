@@ -157,6 +157,22 @@ export class RemoteLink {
       fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement),
       showInfo: !!app.showInfo,
       presets: app.presets ? app.presets.list?.() || null : null,
+      // Continue-watching lives in this screen's localStorage, so the phone can
+      // only see it if we send it. Trimmed to what a resume card needs.
+      history: (app.history?.list() || []).slice(0, 12).map((e) => ({
+        id: e.id,
+        type: e.type || 'movie',
+        title: e.title,
+        showName: e.showName || null,
+        showCover: e.showCover || null,
+        season: e.season ?? null,
+        episode: e.episode ?? null,
+        poster: e.poster || null,
+        position: e.position || 0,
+        durationSecs: e.durationSecs || null,
+        finished: !!e.finished,
+        mode: e.mode || 'direct',
+      })),
       players: app.players.map((p) => {
         const c = p.channel || {};
         const onDemand = p.isOnDemand();

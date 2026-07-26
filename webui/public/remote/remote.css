@@ -14,6 +14,12 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* #app sets display:flex, which outranks the UA's [hidden] rule by specificity
+   — without this the "Now" view stays on screen behind the browse views. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -244,6 +250,239 @@ body {
   line-height: 1.5;
   color: var(--muted);
   margin: 4px 4px 0;
+}
+
+/* --- browse views ------------------------------------------------------- */
+#browse {
+  padding: 12px 12px calc(96px + env(safe-area-inset-bottom));
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.searchbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.searchbar input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 14px;
+  font-size: 16px; /* 16px stops iOS zooming the page on focus */
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  outline: none;
+}
+
+.searchbar input:focus {
+  border-color: var(--accent);
+}
+
+.btn.small {
+  flex: 0 0 auto;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+/* list rows: channels, episodes, programmes, resume cards */
+.rowitem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  text-align: left;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.rowitem:active {
+  background: rgba(56, 189, 248, 0.22);
+}
+
+.ri-art {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 32px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+
+.ri-num {
+  flex: 0 0 auto;
+  min-width: 44px;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ri-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ri-title {
+  font-size: 15px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ri-sub {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* poster grid for films and series */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-auto-rows: max-content;
+  gap: 10px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 8px;
+  text-align: left;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.tile:active {
+  border-color: var(--accent);
+}
+
+.tile img,
+.tile .noart {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+  display: block;
+}
+
+.tl-name {
+  padding: 7px 8px 0;
+  font-size: 12px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tl-sub {
+  padding: 2px 8px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.detail-head {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 2px 2px 10px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #00131c;
+  font-weight: 700;
+}
+
+.hint {
+  color: var(--muted);
+  padding: 18px 4px;
+  font-size: 14px;
+}
+
+.hint.bad {
+  color: #f87171;
+}
+
+#more {
+  margin-top: 12px;
+}
+
+/* --- bottom tab bar ----------------------------------------------------- */
+#tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  background: rgba(6, 8, 11, 0.97);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+  backdrop-filter: blur(6px);
+}
+
+.tab {
+  flex: 1 1 0;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 17px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.tab span {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.tab.active {
+  color: var(--accent);
+}
+
+/* The tab bar sits over the page, so views need room beneath their content. */
+#app {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
 
 #toast {

@@ -74,8 +74,9 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
   guide, watch it with a working scrub bar.
 - **Remote control** — press **Remote** (or `R`) for a QR code, scan it with your
   phone, and drive that screen from your hand: play/pause, seek, volume, focus,
-  layout, split, presets. The phone shows controls only; the picture stays on the
-  main screen. Fullscreen has to be started on the screen itself (browsers refuse
+  layout, split, presets — plus browse tabs for live channels, films, series and
+  catch-up, and a continue-watching list, so you can pick what plays next from
+  your hand. The phone shows controls only; the picture stays on the main screen. Fullscreen has to be started on the screen itself (browsers refuse
   it remotely) but the remote can leave it.
 - **Continue watching** remembers where you got to in the last 30 films and
   offers them as a row at the top of the browser — click one to pick it up, or

@@ -134,7 +134,12 @@ exhaust the budget and stall artwork and API calls.
 
 Commands are an explicit table in `remote-link.js` mapped onto `App` methods —
 never a dispatched string. State is polled once a second and sent only when it
-changes.
+changes, and carries a trimmed watch history: continue-watching lives in the
+screen's localStorage, so the phone can only see it if the screen sends it.
+
+The phone's browse tabs (live, films, series, catch-up) read the same REST API
+the desktop uses — the phone is on the same server — so a picker is UI only and
+adds nothing server-side.
 
 Two things worth knowing:
 * **Fullscreen can't be entered remotely.** `requestFullscreen()` needs transient

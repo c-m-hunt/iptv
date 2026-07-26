@@ -184,6 +184,7 @@ function render() {
   splitEl.disabled = (state?.players || []).length < 2;
 
   renderPresets(state?.presets || []);
+  renderContinue(state?.history || []);
 }
 
 function renderPresets(list) {
@@ -281,6 +282,370 @@ const splitEl = el('split');
 splitEl.addEventListener('change', () => {
   cmd('setSplit', { x: Number(splitEl.value) / 100, y: state?.split?.y ?? 0.5 });
 });
+
+// -- continue watching ------------------------------------------------------
+// Sent by the screen, because the history lives in its localStorage. Tapping a
+// card asks the screen to resume — the phone never plays anything itself.
+function renderContinue(list) {
+  const card = el('continue-card');
+  const box = el('continue');
+  if (!list || !list.length) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const sig = list.map((e) => `${e.type}:${e.id}:${e.position}`).join('|');
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  box.innerHTML = list
+    .map((e, i) => {
+      const left = e.durationSecs ? `${fmt(e.durationSecs - e.position)} left` : fmt(e.position);
+      const sub = e.finished ? 'Watched' : left;
+      const name =
+        e.type === 'episode' && e.showName
+          ? `${e.showName} · S${pad(e.season)}E${pad(e.episode)}`
+          : e.title;
+      return (
+        `<button class="rowitem" data-resume="${i}">` +
+        thumb(e.showCover || e.poster) +
+        `<span class="ri-body"><span class="ri-title">${escapeHtml(name)}</span>` +
+        `<span class="ri-sub">${escapeHtml(sub)}</span></span></button>`
+      );
+    })
+    .join('');
+  box._items = list;
+}
+
+el('continue').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-resume]');
+  if (!btn) return;
+  const entry = (el('continue')._items || [])[Number(btn.dataset.resume)];
+  if (!entry) return;
+  resume(entry);
+});
+
+function resume(entry) {
+  const startAt = entry.finished ? 0 : entry.position || 0;
+  if (entry.type === 'episode') {
+    cmd('playEpisode', {
+      episode: {
+        id: entry.id,
+        type: 'episode',
+        title: entry.title,
+        showName: entry.showName,
+        season: entry.season,
+        episode: entry.episode,
+        poster: entry.poster,
+        showCover: entry.showCover,
+        durationSecs: entry.durationSecs,
+      },
+      startAt,
+    });
+  } else {
+    cmd('playMovie', {
+      film: { id: entry.id, title: entry.title, poster: entry.poster, durationSecs: entry.durationSecs },
+      playback: { mode: entry.mode },
+      startAt,
+    });
+  }
+  toast('Resuming on your screen');
+}
+
+// -- browse -----------------------------------------------------------------
+// Every view is a picker: it reads the same REST API the main screen uses, and
+// tapping a result sends a play command. No media is fetched here.
+const views = { now: el('app'), browse: el('browse') };
+const resultsEl = el('results');
+const moreEl = el('more');
+const qEl = el('q');
+const backEl = el('back');
+
+let view = 'now';
+let browseState = { kind: null, items: [], offset: 0, total: 0, detail: null };
+
+function setView(next) {
+  view = next;
+  views.now.hidden = next !== 'now';
+  views.browse.hidden = next === 'now';
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === next));
+  if (next === 'now') return;
+
+  if (browseState.kind !== next) {
+    browseState = { kind: next, items: [], offset: 0, total: 0, detail: null };
+    qEl.value = '';
+    qEl.placeholder =
+      next === 'live' ? 'Search channels…' : next === 'films' ? 'Search films…' : next === 'series' ? 'Search series…' : 'Filter channels…';
+    qEl.hidden = false;
+    backEl.hidden = true;
+    load();
+  }
+}
+
+document.getElementById('tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('.tab');
+  if (tab) setView(tab.dataset.view);
+});
+
+backEl.addEventListener('click', () => {
+  browseState.detail = null;
+  backEl.hidden = true;
+  qEl.hidden = false;
+  load();
+});
+
+let searchTimer;
+qEl.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => load(), 250);
+});
+
+async function load({ append = false } = {}) {
+  const kind = browseState.kind;
+  const q = qEl.value.trim();
+  if (!append) {
+    browseState.offset = 0;
+    resultsEl.innerHTML = '<div class="hint">Loading…</div>';
+    moreEl.innerHTML = '';
+  }
+  try {
+    if (kind === 'live') {
+      const list = await api(`/api/channels?q=${encodeURIComponent(q)}&limit=80`);
+      browseState.items = list;
+      resultsEl.innerHTML = list.length
+        ? list
+            .map(
+              (c, i) =>
+                `<button class="rowitem" data-play="${i}"><span class="ri-body">` +
+                `<span class="ri-title">${escapeHtml(cleanName(c.name))}</span></span></button>`
+            )
+            .join('')
+        : '<div class="hint">No channels matched.</div>';
+    } else if (kind === 'films' || kind === 'series') {
+      const base = kind === 'films' ? '/api/movies' : '/api/series';
+      const data = await api(`${base}?q=${encodeURIComponent(q)}&limit=40&offset=${browseState.offset}`);
+      browseState.items = append ? browseState.items.concat(data.items) : data.items;
+      browseState.total = data.total;
+      browseState.offset = browseState.items.length;
+      const html = data.items
+        .map((m, i) => {
+          const idx = append ? browseState.items.length - data.items.length + i : i;
+          const art = m.poster || m.cover;
+          const sub = [m.year, m.rating != null ? `★ ${m.rating}` : ''].filter(Boolean).join(' · ');
+          return (
+            `<button class="tile" data-open="${idx}">` +
+            (art ? `<img loading="lazy" src="/api/poster?u=${encodeURIComponent(art)}" alt="" />` : '<span class="noart"></span>') +
+            `<span class="tl-name">${escapeHtml(m.title || m.name)}</span>` +
+            `<span class="tl-sub">${escapeHtml(sub)}</span></button>`
+          );
+        })
+        .join('');
+      if (append) {
+        resultsEl.querySelector('.grid')?.insertAdjacentHTML('beforeend', html);
+      } else {
+        resultsEl.innerHTML = `<div class="grid">${html}</div>`;
+      }
+      moreEl.innerHTML =
+        browseState.items.length < browseState.total
+          ? `<button class="btn" id="more-btn">Load more (${(
+              browseState.total - browseState.items.length
+            ).toLocaleString()} left)</button>`
+          : '';
+    } else if (kind === 'catchup') {
+      const list = await api('/api/catchup/channels');
+      const filtered = q
+        ? list.filter((c) => c.name.toLowerCase().includes(q.toLowerCase()))
+        : list;
+      browseState.items = filtered;
+      resultsEl.innerHTML = filtered.length
+        ? filtered
+            .map(
+              (c, i) =>
+                `<button class="rowitem" data-guide="${i}">` +
+                thumb(c.icon) +
+                `<span class="ri-body"><span class="ri-title">${escapeHtml(cleanName(c.name))}</span>` +
+                `<span class="ri-sub">${c.days} days</span></span></button>`
+            )
+            .join('')
+        : '<div class="hint">No channels matched.</div>';
+    }
+  } catch (err) {
+    resultsEl.innerHTML = `<div class="hint bad">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+moreEl.addEventListener('click', (e) => {
+  if (e.target.closest('#more-btn')) load({ append: true });
+});
+
+resultsEl.addEventListener('click', async (e) => {
+  const play = e.target.closest('[data-play]');
+  if (play) {
+    const c = browseState.items[Number(play.dataset.play)];
+    cmd('playChannel', { id: c.id, name: c.name });
+    toast(`${cleanName(c.name)} → your screen`);
+    return;
+  }
+
+  const open = e.target.closest('[data-open]');
+  if (open) {
+    const item = browseState.items[Number(open.dataset.open)];
+    if (browseState.kind === 'films') return playFilm(item);
+    return showSeries(item);
+  }
+
+  const guide = e.target.closest('[data-guide]');
+  if (guide) return showGuide(browseState.items[Number(guide.dataset.guide)]);
+
+  const ep = e.target.closest('[data-episode]');
+  if (ep) {
+    const episode = browseState.detail.episodes[Number(ep.dataset.episode)];
+    const show = browseState.detail.show;
+    cmd('playEpisode', {
+      episode: {
+        id: episode.id,
+        type: 'episode',
+        title: episode.title,
+        showId: show.id,
+        showName: show.name,
+        showCover: show.cover,
+        season: episode.season,
+        episode: episode.episode,
+        poster: episode.still || show.cover,
+        durationSecs: episode.durationSecs,
+      },
+    });
+    toast('Playing on your screen');
+    return;
+  }
+
+  const prog = e.target.closest('[data-prog]');
+  if (prog) {
+    const p = browseState.detail.programmes[Number(prog.dataset.prog)];
+    const ch = browseState.detail.channel;
+    cmd('playCatchup', {
+      programme: {
+        channelId: ch.id,
+        channelName: ch.name,
+        title: p.title,
+        start: p.start,
+        durationMins: p.durationMins,
+        durationSecs: p.stop - p.start,
+      },
+    });
+    toast('Playing on your screen');
+    return;
+  }
+
+  const season = e.target.closest('[data-season]');
+  if (season) {
+    browseState.detail.season = Number(season.dataset.season);
+    renderSeries();
+  }
+});
+
+async function playFilm(film) {
+  toast('Checking…');
+  try {
+    const [info, playback] = await Promise.all([
+      api(`/api/movies/${film.id}`),
+      api(`/api/movies/${film.id}/playback`),
+    ]);
+    if (playback.mode === 'unsupported') return toast(playback.reason || 'Cannot play this film');
+    cmd('playMovie', { film: info, playback, startAt: 0 });
+    toast(`${info.title} → your screen`);
+  } catch (err) {
+    toast('Failed: ' + err.message);
+  }
+}
+
+async function showSeries(show) {
+  resultsEl.innerHTML = '<div class="hint">Loading…</div>';
+  try {
+    const full = await api(`/api/series/${show.id}`);
+    browseState.detail = { show: full, season: full.seasons[0]?.season ?? null, episodes: [] };
+    qEl.hidden = true;
+    backEl.hidden = false;
+    renderSeries();
+  } catch (err) {
+    resultsEl.innerHTML = `<div class="hint bad">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderSeries() {
+  const { show, season } = browseState.detail;
+  const current = show.seasons.find((s) => s.season === season) || show.seasons[0];
+  browseState.detail.episodes = current ? current.episodes : [];
+  const tabs = show.seasons
+    .map(
+      (s) =>
+        `<button class="chip${s.season === season ? ' active' : ''}" data-season="${s.season}">S${s.season}</button>`
+    )
+    .join('');
+  const eps = (current?.episodes || [])
+    .map(
+      (e, i) =>
+        `<button class="rowitem" data-episode="${i}"><span class="ri-num">${e.episode}</span>` +
+        `<span class="ri-body"><span class="ri-title">${escapeHtml(e.title)}</span>` +
+        `<span class="ri-sub">${escapeHtml(e.duration || '')}</span></span></button>`
+    )
+    .join('');
+  resultsEl.innerHTML =
+    `<div class="detail-head">${escapeHtml(show.name)}</div>` +
+    `<div class="chips">${tabs}</div>${eps}`;
+  moreEl.innerHTML = '';
+}
+
+async function showGuide(channel) {
+  resultsEl.innerHTML = '<div class="hint">Loading guide…</div>';
+  try {
+    const epg = await api(`/api/catchup/${channel.id}/epg`);
+    browseState.detail = { channel: epg.channel || channel, programmes: epg.programmes };
+    qEl.hidden = true;
+    backEl.hidden = false;
+    resultsEl.innerHTML =
+      `<div class="detail-head">${escapeHtml(cleanName(channel.name))} · last ${epg.days} days</div>` +
+      (epg.programmes.length
+        ? epg.programmes
+            .map(
+              (p, i) =>
+                `<button class="rowitem" data-prog="${i}">` +
+                `<span class="ri-num">${escapeHtml(clock(p.start))}</span>` +
+                `<span class="ri-body"><span class="ri-title">${escapeHtml(p.title)}</span>` +
+                `<span class="ri-sub">${escapeHtml(day(p.start))} · ${p.durationMins}m</span></span></button>`
+            )
+            .join('')
+        : '<div class="hint">Nothing in this channel’s archive.</div>');
+    moreEl.innerHTML = '';
+  } catch (err) {
+    resultsEl.innerHTML = `<div class="hint bad">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function api(path) {
+  const resp = await fetch(path);
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+  return data;
+}
+
+function thumb(url) {
+  return url
+    ? `<img class="ri-art" loading="lazy" src="/api/poster?u=${encodeURIComponent(url)}" alt="" />`
+    : '<span class="ri-art"></span>';
+}
+
+function clock(unix) {
+  return new Date(unix * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function day(unix) {
+  const d = new Date(unix * 1000);
+  const today = new Date();
+  const yest = new Date(today.getTime() - 86400000);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yest.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
 
 // -- helpers ----------------------------------------------------------------
 function describeKind(p) {

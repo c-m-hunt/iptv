@@ -24,7 +24,7 @@
       <span id="status">connecting…</span>
     </header>
 
-    <main id="app">
+    <main id="app" class="view" data-view="now">
       <section class="card" id="now">
         <div class="np-kind" id="np-kind">—</div>
         <div class="np-title" id="np-title">Nothing playing</div>
@@ -65,6 +65,11 @@
         <input id="split" class="seek" type="range" min="10" max="90" value="50" />
       </section>
 
+      <section class="card" id="continue-card" hidden>
+        <div class="label">Continue watching</div>
+        <div id="continue"></div>
+      </section>
+
       <section class="card" id="presets-card">
         <div class="label">Presets</div>
         <div class="row wrap" id="presets"></div>
@@ -75,6 +80,31 @@
         started there; this can leave it.
       </p>
     </main>
+
+    <!-- Browse views: pickers that tell the main screen what to play. -->
+    <main id="browse" class="view" hidden>
+      <div class="searchbar" id="searchbar">
+        <input
+          id="q"
+          type="search"
+          placeholder="Search…"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+        <button class="btn small" id="back" hidden>‹ Back</button>
+      </div>
+      <div id="results"></div>
+      <div id="more"></div>
+    </main>
+
+    <nav id="tabs">
+      <button class="tab active" data-view="now">▶︎<span>Now</span></button>
+      <button class="tab" data-view="live">📡<span>Live</span></button>
+      <button class="tab" data-view="films">🎬<span>Films</span></button>
+      <button class="tab" data-view="series">🎞️<span>Series</span></button>
+      <button class="tab" data-view="catchup">📺<span>Catch Up</span></button>
+    </nav>
 
     <div id="toast"></div>
     <script type="module" src="/remote/remote.js"></script>
