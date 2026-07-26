@@ -112,6 +112,12 @@ Most of the non-obvious code exists because of the portal, not the browser. Don'
   on entering fullscreen hands it to the page so Esc closes an overlay instead of
   dropping fullscreen; holding Esc still exits. Chrome/Edge only — Safari and
   Firefox fall back to closing overlays on the way out of fullscreen.
+- **In a container, nothing local is trustworthy for the remote's address.** The
+  interfaces belong to a private bridge and the bound port isn't the published
+  one. `buildUrls()` prefers the request's `Host` header — it carries a host and
+  port that demonstrably reached us — then `REMOTE_HOST`/`REMOTE_PORT`, and skips
+  its own interfaces entirely when `/.dockerenv` exists. `make run` passes the
+  host's LAN address and published port in automatically.
 - **~6 HTTP/1.1 connections per origin.** Each streaming player holds one. That's
   why the remote uses WebSocket rather than SSE: two screens with two players
   each would exhaust the budget and stall artwork and API calls.

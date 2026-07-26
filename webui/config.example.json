@@ -44,6 +44,7 @@
 
   "remote": {
     "host": "",
+    "port": "",
     "pairTtl": 600
   }
 }

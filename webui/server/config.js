@@ -49,6 +49,7 @@ const MAP = {
   'playback.audioChannels': 'REMUX_AUDIO_CHANNELS',
 
   'remote.host': 'REMOTE_HOST',
+  'remote.port': 'REMOTE_PORT',
   'remote.pairTtl': 'REMOTE_PAIR_TTL',
 };
 

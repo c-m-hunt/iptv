@@ -15,6 +15,7 @@
 // a separate, far larger pool.
 
 const crypto = require('crypto');
+const fs = require('fs');
 const os = require('os');
 
 const { WebSocketServer } = require('ws');
@@ -82,28 +83,65 @@ function lanCandidates() {
   return out;
 }
 
-// The address the desktop itself used is the best evidence of something the
-// phone can reach too — unless it's loopback, which tells us nothing.
+// The address the browser used to reach us is the strongest evidence of
+// something a phone can reach too — and, unlike anything we can detect from
+// inside, it carries the *published* port. In Docker that matters twice over:
+// the container sees its own 172.x address and its internal port, neither of
+// which is any use from a phone.
+//
+// Returned complete with port, e.g. "192.168.1.20:8090". Loopback tells us
+// nothing, so it's skipped.
 function hostFromRequest(req) {
-  const host = String(req.hostname || '').trim();
-  if (!host) return null;
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return null;
-  return host;
+  const raw = String((req.headers && req.headers.host) || '').trim();
+  if (!raw) return null;
+  const name = raw.replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+  if (name === 'localhost' || name === '127.0.0.1' || name === '::1') return null;
+  return raw;
+}
+
+// True when we're almost certainly inside a container, where the interfaces we
+// can see belong to a private bridge network the phone can't route to.
+function inContainer() {
+  try {
+    return fs.existsSync('/.dockerenv');
+  } catch {
+    return false;
+  }
 }
 
 function buildUrls(req, port) {
   const candidates = [];
   const seen = new Set();
-  const push = (host, label) => {
+  // The port a phone should use: what the container publishes may differ from
+  // what we bind. REMOTE_PORT overrides; otherwise fall back to our own.
+  const publishedPort = process.env.REMOTE_PORT || port;
+  const push = (host, label, withPort = true) => {
     if (!host || seen.has(host)) return;
     seen.add(host);
-    candidates.push({ host, label, url: `http://${host}:${port}/remote` });
+    const authority = withPort ? `${host}:${publishedPort}` : host;
+    candidates.push({ host: authority, label, url: `http://${authority}/remote` });
   };
 
-  if (process.env.REMOTE_HOST) push(process.env.REMOTE_HOST, `${process.env.REMOTE_HOST} (REMOTE_HOST)`);
-  push(hostFromRequest(req), `${hostFromRequest(req)} (this page's address)`);
-  for (const c of lanCandidates()) push(c.host, c.label);
-  return candidates;
+  if (process.env.REMOTE_HOST) {
+    push(process.env.REMOTE_HOST, `${process.env.REMOTE_HOST} (REMOTE_HOST)`);
+  }
+  // Already carries its own port, so it goes in verbatim.
+  const fromReq = hostFromRequest(req);
+  if (fromReq) push(fromReq, `${fromReq} (the address this page was opened on)`, false);
+
+  if (!inContainer()) {
+    for (const c of lanCandidates()) push(c.host, c.label);
+  } else if (!process.env.REMOTE_HOST && !fromReq) {
+    // Nothing usable: our own interfaces are the container's. Say so rather
+    // than printing an address that can't work.
+    candidates.push({
+      host: null,
+      label: 'running in a container — set REMOTE_HOST to this machine’s LAN address',
+      url: null,
+      unusable: true,
+    });
+  }
+  return candidates.filter((c) => c.url);
 }
 
 // -- pairing ----------------------------------------------------------------
@@ -121,7 +159,14 @@ async function pair(req, res, port) {
   session.tokenUsed = false;
 
   const urls = buildUrls(req, port);
-  if (!urls.length) return res.status(500).json({ error: 'no reachable address found' });
+  if (!urls.length) {
+    return res.status(500).json({
+      error: inContainer()
+        ? 'No address a phone could reach. Running in a container: set REMOTE_HOST ' +
+          "(and REMOTE_PORT if the published port differs) to this machine's LAN address."
+        : 'no reachable address found',
+    });
+  }
 
   // The token rides in the fragment: fragments are never sent to a server, so
   // it stays out of access logs and Referer headers.

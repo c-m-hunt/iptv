@@ -109,8 +109,21 @@ Docker:
 
 ```bash
 make run            # builds the image and starts the container
-make run LS_DB="$HOME/Library/Application Support/<YourApp>/Local Storage/file__0.localstorage"
 ```
+
+`make run` handles the two things that don't survive containerisation on their
+own:
+
+- **Credentials from a localStorage file.** A host path means nothing inside the
+  container, so if `.env` points `IPTV_LS_DB` at a file on this machine it's
+  copied and mounted automatically. Pass `LS_DB=...` to use a different one.
+- **The phone remote's address.** Inside a container the only addresses visible
+  are the private bridge network's, and the port we bind isn't the one published.
+  Your LAN address and the published port are passed in as `REMOTE_HOST` and
+  `REMOTE_PORT`. Override with `make run HOST_IP=192.168.1.20` if it picks the
+  wrong interface.
+
+A `config.json`, if you have one, is mounted read-only.
 
 Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 `make clean-cache` (drops the cached catalogue volume).
