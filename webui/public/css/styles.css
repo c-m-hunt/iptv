@@ -1181,8 +1181,13 @@ body {
   display: flex;
 }
 
+/* Visible on hover, and on the focused tile while the chrome is awake — the
+   same idle timer that fades the control bar. Without the idle rule the bar sat
+   permanently over the picture, because a single tile is always focused.
+   A paused film keeps its controls: that's when you want them. */
 .player.on-demand:hover .film-bar,
-.player.on-demand.focused .film-bar {
+.player.on-demand.is-paused .film-bar,
+body:not(.chrome-idle) .player.on-demand.focused .film-bar {
   opacity: 1;
 }
 
