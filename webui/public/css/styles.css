@@ -1558,6 +1558,135 @@ body:not(.chrome-idle) .player.on-demand.focused .film-bar {
   }
 }
 
+/* --- remote pairing dialog --------------------------------------------- */
+#remote-pair {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.rp-card {
+  position: relative;
+  width: min(380px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  text-align: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+}
+
+.rp-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.rp-close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rp-title {
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+/* The QR needs a light quiet zone to scan reliably on a dark page. */
+.rp-qr {
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 0 auto 12px;
+  width: min(240px, 70vw);
+}
+
+.rp-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.rp-url {
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.rp-note {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+  text-align: left;
+  margin: 12px 0 0;
+}
+
+.rp-note b {
+  color: var(--text);
+}
+
+.rp-alts {
+  margin-top: 12px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rp-alts summary {
+  cursor: pointer;
+}
+
+.rp-alts ul {
+  list-style: none;
+  padding: 8px 0 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rp-alt {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.rp-alt:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.rp-loading {
+  color: var(--muted);
+  padding: 24px 0;
+}
+
+.rp-loading.bad {
+  color: #f87171;
+}
+
 /* --- toast ------------------------------------------------------------- */
 #toast {
   position: fixed;

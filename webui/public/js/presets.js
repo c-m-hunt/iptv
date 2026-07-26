@@ -52,6 +52,13 @@ export class Presets {
     return this.data[slot] || null;
   }
 
+  // Flat view for the phone remote, which renders its own preset buttons.
+  list() {
+    return Object.entries(this.data)
+      .map(([slot, p]) => ({ slot: Number(slot), label: p.label || '(preset)' }))
+      .sort((a, b) => a.slot - b.slot);
+  }
+
   save(slot, setup) {
     this.data[slot] = { ...setup, label: labelFor(setup) };
     this._write();

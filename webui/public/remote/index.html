@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
+    />
+    <meta name="theme-color" content="#080a0e" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>IPTV Remote</title>
+    <link rel="icon" href="data:," />
+    <!-- Absolute: this page is served at /remote (no trailing slash), so
+         relative paths would resolve against the site root. -->
+    <link rel="stylesheet" href="/remote/remote.css" />
+  </head>
+  <body>
+    <!-- Control surface only: there is deliberately no <video> on this page. -->
+    <header id="bar">
+      <span id="dot" class="dot" aria-label="Connection"></span>
+      <select id="screens" aria-label="Screen"></select>
+      <span id="status">connecting…</span>
+    </header>
+
+    <main id="app">
+      <section class="card" id="now">
+        <div class="np-kind" id="np-kind">—</div>
+        <div class="np-title" id="np-title">Nothing playing</div>
+        <div class="np-sub" id="np-sub"></div>
+        <input id="seek" class="seek" type="range" min="0" max="1000" value="0" disabled />
+        <div class="np-times"><span id="t-pos">0:00</span><span id="t-dur">0:00</span></div>
+        <div class="row">
+          <button class="btn wide" data-cmd="nudge" data-delta="-30">⏪ 30s</button>
+          <button class="btn big" id="pp" data-cmd="playPause">▶︎</button>
+          <button class="btn wide" data-cmd="nudge" data-delta="30">30s ⏩</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="label">Volume <span id="vol-val" class="muted"></span></div>
+        <input id="vol" class="seek" type="range" min="0" max="100" value="100" />
+        <div class="row">
+          <button class="btn" data-cmd="mute" data-muted="1">🔇 Mute</button>
+          <button class="btn" data-cmd="adjustVolume" data-delta="-0.1">− Vol</button>
+          <button class="btn" data-cmd="adjustVolume" data-delta="0.1">+ Vol</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="label">Screens</div>
+        <div class="row" id="focus-row"></div>
+        <div class="row">
+          <button class="btn" data-cmd="addPlayer">+ Player</button>
+          <button class="btn" data-cmd="removePlayer">− Player</button>
+          <button class="btn" data-cmd="swapPlayers">⇄ Swap</button>
+        </div>
+        <div class="row">
+          <button class="btn" data-cmd="cycleLayout" id="layout-btn">Layout</button>
+          <button class="btn" data-cmd="toggleInfo">ⓘ Info</button>
+          <button class="btn" data-cmd="exitFullscreen">Exit full</button>
+        </div>
+        <div class="label">Split</div>
+        <input id="split" class="seek" type="range" min="10" max="90" value="50" />
+      </section>
+
+      <section class="card" id="presets-card">
+        <div class="label">Presets</div>
+        <div class="row wrap" id="presets"></div>
+      </section>
+
+      <p class="foot">
+        Controls only — the picture stays on your main screen. Fullscreen must be
+        started there; this can leave it.
+      </p>
+    </main>
+
+    <div id="toast"></div>
+    <script type="module" src="/remote/remote.js"></script>
+  </body>
+</html>

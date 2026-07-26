@@ -72,6 +72,11 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 - **Catch Up** replays the last 5–14 days from the 137 archive-capable channels
   (BBC, ITV, Channel 4/5 and similar): pick a channel, pick a programme from the
   guide, watch it with a working scrub bar.
+- **Remote control** — press **Remote** (or `R`) for a QR code, scan it with your
+  phone, and drive that screen from your hand: play/pause, seek, volume, focus,
+  layout, split, presets. The phone shows controls only; the picture stays on the
+  main screen. Fullscreen has to be started on the screen itself (browsers refuse
+  it remotely) but the remote can leave it.
 - **Continue watching** remembers where you got to in the last 30 films and
   offers them as a row at the top of the browser — click one to pick it up, or
   hover and press **×** to drop it from the list. The detail view offers both
@@ -88,6 +93,7 @@ Other targets: `make build`, `make logs`, `make stop`, `make clean`,
 | `1` / `2` | Focus a player and (re)open its channel search |
 | `A` | Toggle the profile panel (subscription / expiry) |
 | `M` | Toggle the film browser |
+| `R` | Remote-control QR for this screen |
 | `V` | Toggle the series browser |
 | `T` | Toggle the catch-up guide |
 | `?` | Toggle the help panel |
@@ -113,6 +119,13 @@ switch). Anything not covered by a video is black.
   AAC). Remuxed films seek by restarting the stream at an offset, so both cases
   get a working scrub bar. Without ffmpeg installed the app still runs — the
   non-MP4 films just say so instead of offering Play.
+- **Remote control**: a phone can't connect to a browser directly, so the server
+  relays commands to the screen and state back. WebSocket rather than SSE, because
+  a streaming player already uses one of the browser's ~6 HTTP/1.1 connections per
+  origin. Pairing tokens travel in the URL fragment, which is never sent to a
+  server. `lanCandidates()` ranks addresses (physical interfaces up, VM bridges and
+  VPN tunnels down) since a machine usually has several and only some are reachable
+  from a phone — set `REMOTE_HOST` when running in Docker.
 - **Series**: `get_series` carries enough metadata for the browse grid on its
   own; `get_series_info` adds seasons and episodes. Episodes are VOD files, so
   they share the film probe and the direct/remux playback split.
@@ -149,4 +162,8 @@ switch). Anything not covered by a video is black.
 | `GET /api/catchup/:id/epg` | Programmes still inside the archive window |
 | `GET /api/stream/catchup/:id?start=&duration=` | Proxied archive stream (MPEG-TS) |
 | `GET /api/poster?u=` | Proxied poster image |
+| `GET /api/remote/pair?session=` | `{ url, qrSvg, alternatives }` for the phone |
+| `GET /api/remote/screens` | Screens currently available to control |
+| `GET /remote` | Phone remote-control UI |
+| `WS /ws/screen?s=` · `WS /ws/remote?s=&t=` | Relay between screen and phone |
 | `GET /api/refresh` | Force-refresh the catalogue cache |

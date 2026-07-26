@@ -100,6 +100,12 @@ export function installShortcuts(app) {
         app.toggleSeries();
         break;
 
+      case 'r':
+      case 'R':
+        e.preventDefault();
+        app.toggleRemoteLink();
+        break;
+
       case 's':
       case 'S':
         e.preventDefault();

@@ -36,6 +36,7 @@ webui/
     remux.js       ffmpeg container swap for MKV/AVI films (fMP4 on stdout)
     catchup.js     Archive-capable channels, their EPG, timeshift URLs
     series.js      TV series catalogue: shows, seasons, episodes
+    remote.js      Phone remote: pairing, QR, LAN address ranking, WS relay
   public/          Static frontend (ES modules, no bundler)
     js/
       app.js       App class — orchestrates all state, layout, players, controls
@@ -48,6 +49,8 @@ webui/
       history.js   WatchHistory — recently played films + resume points
       catchup.js   Catch Up — channel list + EPG guide for the last 5–14 days
       series.js    Series — browse/search shows, seasons, episodes
+      remote-link.js  Registers this screen, runs remote commands, reports state
+  public/remote/   Phone remote-control UI (separate page, no <video> at all)
       shortcuts.js Global keyboard handler — delegates to App methods
     css/styles.css Single stylesheet for everything
 ```
@@ -114,6 +117,36 @@ the playback mode so resuming skips the probe; episodes re-probe via
 `playEpisode()`. `applySetup()` restores a film via `history.resumeAt(id)` — restoring
 at 0 would replay from the start and overwrite the saved point.
 
+**Phone remote**: a phone can't reach the desktop browser directly (browsers take
+no inbound connections), so the server relays: `phone → server → screen`, with
+state flowing back. The phone is a **control surface only** — it never receives
+video.
+
+Each open tab registers a screen id from `crypto.randomUUID()` kept in
+**sessionStorage**, so a reload keeps controlling the same screen but a second tab
+is correctly a second screen. Pressing Remote (`R`) issues a fresh token and
+returns a QR; the token lives in the URL **fragment**, which browsers never send
+to a server, keeping it out of access logs and `Referer`.
+
+WebSocket, not SSE: each streaming player already holds one of the browser's ~6
+HTTP/1.1 connections per origin, so two screens running two players each would
+exhaust the budget and stall artwork and API calls.
+
+Commands are an explicit table in `remote-link.js` mapped onto `App` methods —
+never a dispatched string. State is polled once a second and sent only when it
+changes.
+
+Two things worth knowing:
+* **Fullscreen can't be entered remotely.** `requestFullscreen()` needs transient
+  user activation, and a network message isn't one — verified: it throws
+  "Permissions check failed". `exitFullscreen()` *is* allowed, so the remote can
+  leave but not enter. Audio/unmute only needs *sticky* activation, so it works.
+* **"The network IP" isn't one answer.** This machine reports a Wi-Fi address, a
+  VM bridge and a VPN tunnel; only the first is reachable from a phone.
+  `lanCandidates()` ranks physical interfaces up and bridges/tunnels down, and the
+  pairing dialog offers the runners-up (plus the mDNS `.local` name) when the
+  first doesn't work. In Docker, set `REMOTE_HOST` to the host's LAN address.
+
 **Layout**: `computeLayout(mode, split)` in `layout.js` returns `{ rects, handle }` in percent units. Three modes: `horizontal` (side-by-side, vertical drag handle), `diag-tlbr` / `diag-bltr` (large + overlapping inset, point drag handle). `App.render()` calls this and positions players via `applyRect()`.
 
 **Audio**: all videos start muted. `_canUnmute` becomes true on the first user gesture. In multi-player mode only the focused player is unmuted. Volume (`player.volume`, 0–1) is independent of muted state and persists across focus changes.
@@ -130,4 +163,4 @@ at 0 would replay from the start and overwrite the saved point.
 
 ### Keyboard shortcuts
 
-`Space` pause/resume film · `F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `M` films · `V` series · `T` catch-up · `?` help
+`Space` pause/resume film · `F` fullscreen · `← → ↑ ↓` resize split · `D` info badge · `1 / 2` focus/search · `X` swap · `C` pin toolbar · `P` presets · `S` + `1–9` save preset · `+ / −` volume · `A` profile · `M` films · `V` series · `T` catch-up · `R` remote · `?` help

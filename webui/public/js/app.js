@@ -7,6 +7,7 @@ import { Films } from './films.js';
 import { WatchHistory } from './history.js';
 import { Catchup } from './catchup.js';
 import { Series } from './series.js';
+import { RemoteLink } from './remote-link.js';
 import { computeLayout, clampSplit, MODES, MODE_LABELS } from './layout.js';
 import { installShortcuts } from './shortcuts.js';
 
@@ -36,6 +37,10 @@ class App {
       history: this.history,
       onPlayEpisode: (episode) => this.playEpisode(episode),
     });
+
+    // Registers this screen so a phone can control it. Control surface only —
+    // no video is ever sent anywhere.
+    this.remote = new RemoteLink(this);
 
     // A closing tab gets no timeupdate, so flush the resume point on the way out.
     window.addEventListener('pagehide', () => this.players.forEach((p) => p.saveProgress()));
@@ -146,6 +151,22 @@ class App {
     this.render();
   }
 
+  // Absolute split, for a slider on the phone remote.
+  setSplit(x, y) {
+    if (this.players.length < 2) return;
+    this.split = clampSplit({ x, y });
+    this.render();
+  }
+
+  loadPreset(slot) {
+    const p = this.presets.get(slot);
+    if (!p) {
+      this.toast(`Slot ${slot} is empty`, 1200);
+      return;
+    }
+    this.applySetup(p);
+  }
+
   render() {
     const mode = this.effectiveMode;
     const layout = computeLayout(mode, this.split);
@@ -220,6 +241,14 @@ class App {
     }
   }
 
+  // Leaving fullscreen needs no user gesture, so a remote can do this even
+  // though it can never put the page *into* fullscreen.
+  exitFullscreen() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    }
+  }
+
   // -- controls + handle --------------------------------------------------
   _wireControls() {
     const fsBtn = document.getElementById('btn-fs');
@@ -243,6 +272,30 @@ class App {
     document.getElementById('btn-catchup').addEventListener('click', () => this.toggleCatchup());
     document.getElementById('btn-series').addEventListener('click', () => this.toggleSeries());
     document.getElementById('btn-help').addEventListener('click', () => this.toggleHelp());
+    document.getElementById('btn-remote').addEventListener('click', () => this.toggleRemoteLink());
+    // The alternative-address buttons re-render the QR for a different host.
+    document.getElementById('remote-pair').addEventListener('click', async (e) => {
+      if (e.target.closest('.rp-close') || e.target.id === 'remote-pair') {
+        this.closeRemoteLink();
+        return;
+      }
+      const alt = e.target.closest('.rp-alt');
+      if (alt) {
+        const url = alt.dataset.url;
+        const qr = document.querySelector('#remote-pair .rp-qr');
+        const label = document.querySelector('#remote-pair .rp-url');
+        try {
+          const resp = await fetch('/api/remote/qr?url=' + encodeURIComponent(url));
+          const data = await resp.json();
+          if (resp.ok) {
+            qr.innerHTML = data.qrSvg;
+            label.textContent = url.replace(/#.*$/, '');
+          }
+        } catch {
+          /* leave the current QR in place */
+        }
+      }
+    });
 
     // First user gesture unlocks audio: unmute the focused player.
     const unlock = () => {
@@ -367,6 +420,34 @@ class App {
 
   toggleSeries() {
     this.series.toggle();
+  }
+
+  // -- remote control pairing ---------------------------------------------
+  async toggleRemoteLink() {
+    const panel = document.getElementById('remote-pair');
+    if (!panel.classList.contains('hidden')) {
+      panel.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+    panel.innerHTML = '<div class="rp-card"><div class="rp-loading">Preparing link…</div></div>';
+    try {
+      const resp = await fetch(
+        '/api/remote/pair?session=' + encodeURIComponent(this.remote.sessionId)
+      );
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+      panel.innerHTML = renderPairing(data);
+    } catch (err) {
+      panel.innerHTML =
+        `<div class="rp-card"><div class="rp-loading bad">Couldn't create a link: ${escapeHtml(
+          err.message
+        )}</div></div>`;
+    }
+  }
+
+  closeRemoteLink() {
+    document.getElementById('remote-pair')?.classList.add('hidden');
   }
 
   // Episodes play exactly like films; the probe decides direct vs remux.
@@ -604,6 +685,10 @@ class App {
       this.series.close();
       did = true;
     }
+    if (!document.getElementById('remote-pair').classList.contains('hidden')) {
+      this.closeRemoteLink();
+      did = true;
+    }
     return did;
   }
 
@@ -614,6 +699,43 @@ class App {
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => el.classList.remove('show'), ms);
   }
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[c]);
+}
+
+// The QR arrives as SVG from the server, which is where the reachable address is
+// known. Alternatives are offered because a machine can have several addresses
+// and only some are reachable from a phone.
+function renderPairing(data) {
+  const alts = (data.alternatives || [])
+    .map(
+      (a) =>
+        `<li><button class="rp-alt" data-url="${escapeHtml(a.url)}">${escapeHtml(
+          a.label
+        )}</button></li>`
+    )
+    .join('');
+  return `
+    <div class="rp-card">
+      <button class="rp-close" title="Close (Esc)">×</button>
+      <div class="rp-title">Remote control</div>
+      <div class="rp-qr">${data.qrSvg}</div>
+      <div class="rp-url">${escapeHtml(data.url.replace(/#.*$/, ''))}</div>
+      <p class="rp-note">
+        Scan with your phone to control <b>this</b> screen. The phone shows controls
+        only — the picture stays here. Fullscreen has to be started here (browsers
+        refuse it remotely); after that the remote can drive everything.
+      </p>
+      ${alts ? `<details class="rp-alts"><summary>Phone can’t connect?</summary><ul>${alts}</ul></details>` : ''}
+    </div>`;
 }
 
 function episodeLabel(e) {

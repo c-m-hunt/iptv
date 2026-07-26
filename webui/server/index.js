@@ -20,6 +20,10 @@
 //   GET /api/catchup/:id/epg     -> programmes still inside the archive window
 //   GET /api/stream/catchup/:id?start=&duration= -> proxied archive stream
 //   GET /api/poster?u=           -> proxied poster image
+//   GET /api/remote/pair?session= -> { url, qrSvg, alternatives } for the phone
+//   GET /api/remote/screens      -> live screens available to control
+//   GET /remote                  -> phone remote-control UI (no video)
+//   WS  /ws/screen?s= , /ws/remote?s=&t= -> relay
 //   GET /api/refresh             -> force-refresh catalogue cache
 //   /                            -> static frontend (../public)
 
@@ -31,6 +35,7 @@ const vod = require('./vod');
 const remux = require('./remux');
 const catchup = require('./catchup');
 const series = require('./series');
+const remote = require('./remote');
 
 const PORT = Number(process.env.PORT || 8090);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -294,11 +299,29 @@ app.get('/api/refresh', async (req, res) => {
   }
 });
 
+// -- remote control ---------------------------------------------------------
+// The phone UI is a control surface only: it never receives video.
+app.get('/api/remote/pair', (req, res) => remote.pair(req, res, PORT));
+
+app.get('/api/remote/qr', (req, res) => remote.qrFor(req, res));
+
+app.get('/api/remote/screens', (req, res) => {
+  res.json({ screens: remote.screenList() });
+});
+
+app.get('/remote', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'remote', 'index.html'));
+});
+
 app.use(express.static(PUBLIC_DIR));
 
-app.listen(PORT, HOST, async () => {
+const server = app.listen(PORT, HOST, async () => {
   console.log(`iptv player-grid listening on http://localhost:${PORT}`);
   console.log(`  credentials: ${iptv.hasCredentials() ? 'OK' : 'MISSING'}`);
   console.log(`  cache dir:   ${iptv.CACHE_DIR}`);
   console.log(`  ffmpeg:      ${(await remux.available()) ? 'OK (MKV/AVI films playable)' : 'MISSING (MP4 films only)'}`);
+  console.log(`  remote:      ws relay on /ws, phone UI at /remote`);
 });
+
+// Share the HTTP server so the relay needs no extra port or firewall hole.
+remote.attach(server, { path: '/ws' });
