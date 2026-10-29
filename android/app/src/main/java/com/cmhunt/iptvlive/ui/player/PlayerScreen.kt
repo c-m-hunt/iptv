@@ -54,6 +54,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.cmhunt.iptvlive.AppContainer
+import com.cmhunt.iptvlive.ui.tv.TvButton
+import com.cmhunt.iptvlive.ui.tv.TvPanel
 import kotlinx.coroutines.delay
 
 private const val CONTROLS_HIDE_MS = 4_000L
@@ -62,6 +64,18 @@ private const val CONTROLS_HIDE_MS = 4_000L
 fun PlayerScreen(container: AppContainer, channelId: Int, onBack: () -> Unit) {
     val vm = viewModel(key = "player-$channelId") { PlayerViewModel(container, channelId) }
     val target by vm.target.collectAsStateWithLifecycle()
+    val tvState by container.tv.state.collectAsStateWithLifecycle()
+
+    // With a TV selected the channel goes there and this screen is its remote.
+    // Choosing a TV mid-playback lands here too: the local player is disposed,
+    // which frees its connection before the TV asks for one.
+    if (tvState.device != null) {
+        LaunchedEffect(channelId, tvState.device) {
+            if (container.tv.state.value.channelId != channelId) container.tv.play(channelId)
+        }
+        TvPanel(container, channelId, onBack)
+        return
+    }
 
     FullScreenLandscape()
 
@@ -132,13 +146,13 @@ private fun LivePlayer(container: AppContainer, target: PlayerTarget.Ready, onBa
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopStart).fillMaxWidth(),
         ) {
-            TopBar(target.name, ui.unsupportedAudio, onBack)
+            TopBar(target.name, ui.unsupportedAudio, onBack) { TvButton(container, tint = Color.White) }
         }
     }
 }
 
 @Composable
-private fun TopBar(name: String, unsupportedAudio: String?, onBack: () -> Unit) {
+private fun TopBar(name: String, unsupportedAudio: String?, onBack: () -> Unit, actions: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -150,7 +164,7 @@ private fun TopBar(name: String, unsupportedAudio: String?, onBack: () -> Unit) 
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
             }
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text(
                     name,
                     color = Color.White,
@@ -166,6 +180,7 @@ private fun TopBar(name: String, unsupportedAudio: String?, onBack: () -> Unit) 
                     )
                 }
             }
+            actions()
         }
     }
 }

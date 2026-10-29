@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cmhunt.iptvlive.AppContainer
+import com.cmhunt.iptvlive.ui.tv.TvBanner
+import com.cmhunt.iptvlive.ui.tv.TvButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +59,7 @@ fun ChannelsScreen(container: AppContainer, onPlay: (Int) -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val refresh by vm.refresh.collectAsStateWithLifecycle()
+    val tvState by container.tv.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -74,6 +77,7 @@ fun ChannelsScreen(container: AppContainer, onPlay: (Int) -> Unit) {
             TopAppBar(
                 title = { Text("Channels") },
                 actions = {
+                    TvButton(container)
                     IconButton(onClick = vm::refresh) { Icon(Icons.Filled.Refresh, "Refresh channel list") }
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "More") }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -87,6 +91,13 @@ fun ChannelsScreen(container: AppContainer, onPlay: (Int) -> Unit) {
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = {
+            TvBanner(
+                tvState,
+                onOpen = { tvState.channelId?.let(onPlay) },
+                onStop = container.tv::stop,
+            )
+        },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             OutlinedTextField(

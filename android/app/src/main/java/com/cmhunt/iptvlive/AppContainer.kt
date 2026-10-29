@@ -9,6 +9,7 @@ import com.cmhunt.iptvlive.data.CredentialStore
 import com.cmhunt.iptvlive.data.SecretBox
 import com.cmhunt.iptvlive.data.db.AppDatabase
 import com.cmhunt.iptvlive.data.xtream.XtreamClient
+import com.cmhunt.iptvlive.tv.TvController
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -42,6 +43,7 @@ class AppContainer(context: Context) {
     val xtream = XtreamClient(http)
     val credentials = CredentialStore(prefs, SecretBox())
     val catalogue = CatalogueRepository(db.catalogue(), xtream, prefs)
+    val tv = TvController(context, http, credentials, catalogue)
 
     companion object {
         const val USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20"

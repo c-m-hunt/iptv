@@ -6,8 +6,8 @@ needed. Built for phones first, and kept usable with a D-pad so a TV box can
 run the same APK later.
 
 Status: **phase 1** — log in, download and search the channel list, play a
-channel. Categories, presets, recents, favourites, EPG and the account panel
-follow.
+channel — plus **Play on TV** over DLNA. Categories, presets, recents,
+favourites, EPG and the account panel follow.
 
 ## Stack
 
@@ -18,6 +18,7 @@ follow.
 | Storage | Room for the channel catalogue, DataStore for settings |
 | Secrets | Password encrypted with an Android Keystore AES-GCM key |
 | Images | Coil 3, sharing the OkHttp client |
+| Play on TV | DLNA/UPnP: SSDP discovery, AVTransport SOAP, an optional relay |
 | Wiring | Hand-rolled `AppContainer`, no DI framework |
 
 minSdk 26, targetSdk 36. AGP 8.13, Kotlin 2.2, Gradle 8.14.
@@ -29,7 +30,7 @@ Needs the Android SDK (Android Studio installs it) and JDK 17 or newer.
 ```bash
 cd android
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
-./gradlew testDebugUnitTest      # JVM tests: URL handling, search
+./gradlew testDebugUnitTest      # JVM tests: URLs, search, DLNA parsing, relay
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -48,6 +49,50 @@ node dev/mock-xtream.mjs          # needs ffmpeg with libx264
 Log in from the emulator with server `10.0.2.2:8099`, username `test`,
 password `test`.
 
+`dev/mock-dlna-renderer.mjs` is a fake DLNA TV. It answers SSDP, so it shows
+up in the TV picker (or add `10.0.2.2:8098/dmr` by address), and on Play it
+really downloads the stream and logs the DLNA headers it got.
+
+```bash
+node dev/mock-dlna-renderer.mjs              # plays whatever URL it is given
+node dev/mock-dlna-renderer.mjs --lan-only   # refuses the provider URL: tests the relay
+adb forward tcp:8765 tcp:8765                # lets the mock reach the emulator's relay
+```
+
+## Play on TV (DLNA)
+
+Your provider only serves raw MPEG-TS (`allowed_output_formats: ["ts"]`, no
+HLS, no CORS), which rules out Chromecast's default receiver. DLNA TVs play
+MPEG-TS natively — HEVC included on recent Samsungs — so the stream goes to
+the TV untouched.
+
+1. **Discovery.** SSDP M-SEARCH for `MediaRenderer` and `AVTransport`, under a
+   Wi-Fi multicast lock. TVs can also be added by IP; a bare address is tried
+   at Samsung's `:9197/dmr`.
+2. **Direct first.** The TV is given the provider URL itself, so once it plays
+   the phone is free and can sleep.
+3. **Relay if that fails.** If the TV won't start (it goes `TRANSITIONING` →
+   `STOPPED`, or sits in `STOPPED` for 4 s), the phone serves the stream from
+   a small HTTP server on port 8765, behind a random path token. A foreground
+   service with Wi-Fi and wake locks keeps it alive with the screen off. That
+   TV goes straight to the relay for the rest of the session.
+4. **Watching.** The app polls `GetTransportInfo` every 5 s and notices when
+   the TV stops on its own.
+
+DLNA details that matter:
+
+- **MIME type `video/mpeg`, not `video/mp2t`.** A Samsung QN700B's
+  `GetProtocolInfo` lists no `video/mp2t` at all, but accepts `video/mpeg`
+  with any profile.
+- **Live flags:** `DLNA.ORG_OP=00` (no seeking) and streaming transfer mode,
+  in both the DIDL metadata and the relay's response headers.
+- **Stop before SetAVTransportURI.** Many TVs refuse a new URI while playing.
+- The relay answers `HEAD` without touching the provider, and a second `GET`
+  for the same stream replaces the first, so a TV that probes before it plays
+  costs one account connection, not two.
+- The provider accepts a non-VLC user agent on stream URLs, so direct mode
+  should work for most TVs.
+
 ## Layout
 
 ```
@@ -62,11 +107,19 @@ app/src/main/java/com/cmhunt/iptvlive/
     CredentialStore.kt          Saved login (password encrypted)
     SecretBox.kt                Keystore AES-GCM
     ChannelSearch.kt            Local all-words search
+    dlna/Ssdp.kt                SSDP discovery
+    dlna/DlnaDevice.kt          Device description parsing
+    dlna/AvTransport.kt         SetAVTransportURI, Play, Stop, GetTransportInfo
+    dlna/StreamRelay.kt         Phone-side HTTP relay for TVs
+  tv/
+    TvController.kt             Direct-then-relay playback on a TV, status
+    RelayService.kt             Foreground service while the relay runs
   ui/
     AppRoot.kt                  Login vs. main screens, navigation
     login/                      Login form
     channels/                   Channel list and search
     player/                     Full-screen player, StreamPlayer (ExoPlayer)
+    tv/                         TV picker, TV panel, "playing on TV" banner
 ```
 
 ## Things learned the hard way
