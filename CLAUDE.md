@@ -8,6 +8,13 @@ A web UI for an Xtream Codes IPTV subscription: live TV in one or two tiles,
 films, TV series, catch-up, and a phone remote. Single user, home network, no
 authentication. See `webui/README.md` for the user-facing view.
 
+## Android app
+
+`android/` is a separate, native live-TV-only client (Kotlin, Compose, Media3)
+that talks to the provider directly — it shares no code with `webui/`. See
+`android/README.md` for the build, the mock portal in `android/dev/`, and the
+playback lessons learned there.
+
 ## Running it
 
 ```bash
