@@ -70,6 +70,7 @@ class TvController(
         .build()
     private val avt = AvTransport(soapHttp)
     private val relay = StreamRelay(http)
+    private val noRedirects = soapHttp.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
     private val _state = MutableStateFlow(TvState())
     val state: StateFlow<TvState> = _state
@@ -148,12 +149,12 @@ class TvController(
         _state.update {
             it.copy(channelId = channelId, channelName = channel.name, status = TvStatus.Starting("Connecting to ${device.name}…"))
         }
-        val direct = XtreamUrls.liveStream(creds.streamBase, creds.username, creds.password, channel.id)
+        val source = XtreamUrls.liveStream(creds.streamBase, creds.username, creds.password, channel.id)
 
         var lastError: String? = null
         if (device.udn !in needsRelay) {
             endRelay()
-            when (val r = tryStart(device, direct, channel.name)) {
+            when (val r = tryStart(device, resolveRedirects(source), channel.name)) {
                 null -> return playing(device, TvMode.Direct)
                 else -> lastError = r
             }
@@ -162,7 +163,8 @@ class TvController(
 
         _state.update { it.copy(status = TvStatus.Starting("Sending through this phone…")) }
         val relayed = try {
-            withContext(Dispatchers.IO) { relay.publish(direct, channel.id, device.host) }
+            // The relay follows redirects per connection, so it gets fresh edge tokens.
+            withContext(Dispatchers.IO) { relay.publish(source, channel.id, device.host) }
         } catch (e: Exception) {
             return fail("Could not start the relay on this phone.")
         }
@@ -228,6 +230,25 @@ class TvController(
         }
     }
 
+    /**
+     * The portal answers a stream URL with a 302 (HTML body) to a tokenised
+     * edge server. A Samsung QN700B gives up on that redirect but plays the
+     * edge URL it points to, so the TV is handed the end of the chain. Falls
+     * back to the original URL if the portal can't be asked.
+     */
+    private suspend fun resolveRedirects(url: String): String = withContext(Dispatchers.IO) {
+        var current = url
+        repeat(MAX_REDIRECTS) {
+            val next = runCatching {
+                noRedirects.newCall(Request.Builder().url(current).head().build()).execute().use { resp ->
+                    resp.header("Location")?.takeIf { resp.isRedirect }?.let { resp.request.url.resolve(it)?.toString() }
+                }
+            }.getOrNull() ?: return@withContext current
+            current = next
+        }
+        current
+    }
+
     private fun fail(message: String) = _state.update { it.copy(status = TvStatus.Failed(message)) }
 
     private fun endRelay() {
@@ -247,6 +268,7 @@ class TvController(
     private companion object {
         const val START_POLLS = 15
         const val STOPPED_POLLS = 4
+        const val MAX_REDIRECTS = 5
         const val NOT_STARTED = "not started"
     }
 }

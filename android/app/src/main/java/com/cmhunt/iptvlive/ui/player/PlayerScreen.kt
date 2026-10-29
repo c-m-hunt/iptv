@@ -54,7 +54,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.cmhunt.iptvlive.AppContainer
-import com.cmhunt.iptvlive.ui.tv.TvButton
+import com.cmhunt.iptvlive.ui.tv.TvIcon
+import com.cmhunt.iptvlive.ui.tv.TvPickerSheet
 import com.cmhunt.iptvlive.ui.tv.TvPanel
 import kotlinx.coroutines.delay
 
@@ -107,8 +108,9 @@ private fun LivePlayer(container: AppContainer, target: PlayerTarget.Ready, onBa
     val ui = player?.ui?.collectAsState()?.value ?: PlaybackUi()
     var showControls by remember { mutableStateOf(true) }
     var touches by remember { mutableIntStateOf(0) }
-    LaunchedEffect(showControls, touches) {
-        if (showControls) {
+    var pickerOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(showControls, touches, pickerOpen) {
+        if (showControls && !pickerOpen) {
             delay(CONTROLS_HIDE_MS)
             showControls = false
         }
@@ -146,9 +148,14 @@ private fun LivePlayer(container: AppContainer, target: PlayerTarget.Ready, onBa
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopStart).fillMaxWidth(),
         ) {
-            TopBar(target.name, ui.unsupportedAudio, onBack) { TvButton(container, tint = Color.White) }
+            TopBar(target.name, ui.unsupportedAudio, onBack) {
+                TvIcon(container, onClick = { pickerOpen = true }, tint = Color.White)
+            }
         }
     }
+
+    // Outside the overlay, which hides itself after a few seconds.
+    if (pickerOpen) TvPickerSheet(container, onDismiss = { pickerOpen = false })
 }
 
 @Composable

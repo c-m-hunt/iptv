@@ -109,7 +109,9 @@ class StreamRelay(private val http: OkHttpClient) {
             val upstreamUrl = routes[path]
             when {
                 upstreamUrl == null -> respond(out, "404 Not Found")
-                method == "HEAD" -> respond(out, "200 OK", streamHeaders())
+                // No Content-Length here: "0" would tell the TV the stream is
+                // empty, and Samsungs send HEAD before every play.
+                method == "HEAD" -> respond(out, "200 OK", streamHeaders(), withLength = false)
                 method == "GET" -> serve(sock, out, path, upstreamUrl)
                 else -> respond(out, "405 Method Not Allowed")
             }
@@ -172,9 +174,14 @@ class StreamRelay(private val http: OkHttpClient) {
         return parts[0].uppercase() to parts[1].substringBefore('?')
     }
 
-    private fun respond(out: OutputStream, status: String, headers: List<Pair<String, String>> = emptyList()) {
+    private fun respond(
+        out: OutputStream,
+        status: String,
+        headers: List<Pair<String, String>> = emptyList(),
+        withLength: Boolean = true,
+    ) {
         runCatching {
-            out.write(statusLine(status, headers + ("Content-Length" to "0")))
+            out.write(statusLine(status, if (withLength) headers + ("Content-Length" to "0") else headers))
             out.flush()
         }
     }

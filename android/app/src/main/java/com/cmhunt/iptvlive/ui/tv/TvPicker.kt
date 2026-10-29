@@ -56,17 +56,27 @@ import kotlinx.coroutines.launch
 
 /** The TV icon for a top bar: highlighted while a TV is selected; opens the picker. */
 @Composable
-fun TvButton(container: AppContainer, tint: Color = Color.Unspecified) {
-    val state by container.tv.state.collectAsStateWithLifecycle()
+fun TvButton(container: AppContainer) {
     var open by remember { mutableStateOf(false) }
-    IconButton(onClick = { open = true }) {
+    TvIcon(container, onClick = { open = true })
+    if (open) TvPickerSheet(container, onDismiss = { open = false })
+}
+
+/**
+ * The icon alone, for callers that own the picker themselves: one whose
+ * button can leave composition while the sheet is open (the player's
+ * auto-hiding overlay) must keep the sheet outside it, or it closes with it.
+ */
+@Composable
+fun TvIcon(container: AppContainer, onClick: () -> Unit, tint: Color = Color.Unspecified) {
+    val state by container.tv.state.collectAsStateWithLifecycle()
+    IconButton(onClick = onClick) {
         if (state.device != null) {
             Icon(Icons.Filled.ConnectedTv, "Playing on ${state.device?.name}", tint = MaterialTheme.colorScheme.primary)
         } else {
             Icon(Icons.Filled.Tv, "Play on TV", tint = if (tint == Color.Unspecified) MaterialTheme.colorScheme.onSurface else tint)
         }
     }
-    if (open) TvPickerSheet(container, onDismiss = { open = false })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

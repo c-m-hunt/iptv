@@ -69,8 +69,8 @@ the TV untouched.
 1. **Discovery.** SSDP M-SEARCH for `MediaRenderer` and `AVTransport`, under a
    Wi-Fi multicast lock. TVs can also be added by IP; a bare address is tried
    at Samsung's `:9197/dmr`.
-2. **Direct first.** The TV is given the provider URL itself, so once it plays
-   the phone is free and can sleep.
+2. **Direct first.** The app follows the portal's redirect itself and gives the
+   TV the final edge URL, so once it plays the phone is free and can sleep.
 3. **Relay if that fails.** If the TV won't start (it goes `TRANSITIONING` →
    `STOPPED`, or sits in `STOPPED` for 4 s), the phone serves the stream from
    a small HTTP server on port 8765, behind a random path token. A foreground
@@ -86,12 +86,25 @@ DLNA details that matter:
   with any profile.
 - **Live flags:** `DLNA.ORG_OP=00` (no seeking) and streaming transfer mode,
   in both the DIDL metadata and the relay's response headers.
+- **Resolve the redirect for the TV.** The portal answers a stream URL with a
+  302 to a tokenised edge server, with an HTML body. A Samsung QN700B gives up
+  on that, but plays the edge URL straight away.
+- **No `Content-Length` on the relay's HEAD.** Samsungs send HEAD before every
+  play; `Content-Length: 0` made one decide the stream was empty and stop.
 - **Stop before SetAVTransportURI.** Many TVs refuse a new URI while playing.
 - The relay answers `HEAD` without touching the provider, and a second `GET`
   for the same stream replaces the first, so a TV that probes before it plays
   costs one account connection, not two.
-- The provider accepts a non-VLC user agent on stream URLs, so direct mode
-  should work for most TVs.
+- The provider accepts a non-VLC user agent on stream URLs, and a Samsung
+  sends none at all, so direct mode works once the redirect is resolved.
+
+`TvLiveTest` sends a real stream to a real TV through the relay code, from
+your machine. It puts a picture on the TV, so it runs only when asked:
+
+```bash
+DLNA_TV_CONTROL=http://<tv>:9197/upnp/control/AVTransport1 \
+IPTV_TEST_STREAM_URL=<stream url> ./gradlew testDebugUnitTest --tests '*TvLiveTest*'
+```
 
 ## Layout
 

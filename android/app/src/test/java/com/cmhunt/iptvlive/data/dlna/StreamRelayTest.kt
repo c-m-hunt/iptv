@@ -61,6 +61,8 @@ class StreamRelayTest {
         http.newCall(Request.Builder().url(url).head().build()).execute().use { resp ->
             assertEquals(200, resp.code)
             assertEquals(AvTransport.MIME, resp.header("Content-Type"))
+            // "Content-Length: 0" made a Samsung think the stream was empty.
+            assertEquals(null, resp.header("Content-Length"))
         }
     }
 
