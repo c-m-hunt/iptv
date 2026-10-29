@@ -88,7 +88,18 @@ function buildArgs(url, { start = 0, audioCopy = false }) {
 
   // -ss before -i is an input seek: ffmpeg range-requests its way to the
   // nearest keyframe instead of decoding everything before it.
-  if (start > 0) args.push('-ss', String(start));
+  //
+  // -noaccurate_seek is what keeps the sound with the picture. Accurate seek is
+  // on by default and trims *decoded* streams to the exact -ss point, but a
+  // copied stream can only start at a keyframe. Video is copied and audio is
+  // re-encoded, so the two land in different places: keyframes here are ~10s
+  // apart, and a seek landing mid-GOP leaves the audio track starting up to ten
+  // seconds into the output with nothing before it. The MP4 muxer papers over
+  // that hole by inflating the first audio sample's duration to span it, which
+  // no decoder honours — they play the samples back to back, so the sound runs
+  // that far ahead of the picture for the rest of the stream. Seeking both
+  // streams to the same keyframe leaves the audio contiguous and in sync.
+  if (start > 0) args.push('-noaccurate_seek', '-ss', String(start));
 
   args.push('-i', url);
 
