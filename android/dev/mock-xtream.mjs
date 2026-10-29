@@ -115,6 +115,10 @@ http
       return;
     }
     const edge = url.pathname.match(/^\/edge\/(\d+)\.ts$/);
+    if (edge && req.method === 'HEAD') {
+      res.writeHead(200, { 'Content-Type': 'video/mp2t' }).end();
+      return;
+    }
     if (edge) return stream(req, res, edge[1]);
 
     res.writeHead(404).end();

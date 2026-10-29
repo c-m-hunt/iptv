@@ -11,6 +11,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -28,9 +30,11 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 
 data class PlaybackUi(
@@ -59,6 +63,10 @@ class StreamPlayer(context: Context, http: OkHttpClient) {
     val exo: ExoPlayer
 
     private var attempts = 0
+    private var switchJob: Job? = null
+
+    /** Connections to the provider this player has open right now. */
+    private val openStreams = MutableStateFlow(0)
     private var retryJob: Job? = null
     private var lastReloadAt = 0L
 
@@ -93,7 +101,8 @@ class StreamPlayer(context: Context, http: OkHttpClient) {
     }
 
     init {
-        val dataSource = OkHttpDataSource.Factory(http).setUserAgent(AppContainer.USER_AGENT)
+        val okHttp = OkHttpDataSource.Factory(http).setUserAgent(AppContainer.USER_AGENT)
+        val dataSource = DataSource.Factory { CountingDataSource(okHttp.createDataSource(), openStreams) }
         // Default TS flags on purpose. FLAG_ALLOW_NON_IDR_KEYFRAMES with
         // FLAG_DETECT_ACCESS_UNITS froze the video on its first frame (audio kept
         // going), and the default buffer sizes are kept for a similar reason: a
@@ -125,8 +134,7 @@ class StreamPlayer(context: Context, http: OkHttpClient) {
         attempts = 0
         retryJob?.cancel()
         _ui.value = PlaybackUi()
-        exo.setMediaItem(MediaItem.fromUri(url))
-        exo.prepare()
+        restart { exo.setMediaItem(MediaItem.fromUri(url)) }
     }
 
     /** User-initiated retry: resets the automatic retry budget. */
@@ -145,9 +153,25 @@ class StreamPlayer(context: Context, http: OkHttpClient) {
         retryJob?.cancel()
         lastReloadAt = System.currentTimeMillis()
         _ui.update { it.copy(buffering = true, error = null, retrying = false) }
+        restart {}
+    }
+
+    /**
+     * Stops, waits for the old stream's connection to actually close, then
+     * prepares again. stop() only asks the loader thread to close it, so
+     * without the wait the old and new streams overlap for a moment, and an
+     * account at its connection limit (say, one stream already on a TV)
+     * answers the new one with a 403.
+     */
+    private fun restart(beforePrepare: () -> Unit) {
+        switchJob?.cancel()
         exo.stop()
-        exo.prepare()
-        exo.playWhenReady = true
+        switchJob = scope.launch {
+            withTimeoutOrNull(CLOSE_WAIT_MS) { openStreams.first { it == 0 } }
+            beforePrepare()
+            exo.prepare()
+            exo.playWhenReady = true
+        }
     }
 
     // A live stream that freezes often raises no error: the position just stops.
@@ -215,7 +239,35 @@ class StreamPlayer(context: Context, http: OkHttpClient) {
         }
     }
 
+    /** Counts open connections; close() is called even when open() throws. */
+    private class CountingDataSource(
+        private val upstream: DataSource,
+        private val open: MutableStateFlow<Int>,
+    ) : DataSource by upstream {
+        private var counted = false
+
+        override fun open(dataSpec: DataSpec): Long {
+            if (!counted) {
+                counted = true
+                open.update { it + 1 }
+            }
+            return upstream.open(dataSpec)
+        }
+
+        override fun close() {
+            try {
+                upstream.close()
+            } finally {
+                if (counted) {
+                    counted = false
+                    open.update { it - 1 }
+                }
+            }
+        }
+    }
+
     private companion object {
+        const val CLOSE_WAIT_MS = 1_500L
         const val MAX_AUTO_RETRIES = 3
         const val RETRY_BASE_MS = 2_000L
         const val WATCHDOG_TICK_MS = 2_000L

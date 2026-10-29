@@ -58,6 +58,9 @@ interface CatalogueDao {
     @Query("SELECT * FROM categories WHERE id = :id")
     suspend fun category(id: String): CategoryEntity?
 
+    @Query("SELECT * FROM channels WHERE id IN (:ids) ORDER BY position")
+    suspend fun channelsByIds(ids: List<Int>): List<ChannelEntity>
+
     @Query("SELECT * FROM channels WHERE categoryId = :categoryId ORDER BY position")
     fun channelsIn(categoryId: String): Flow<List<ChannelEntity>>
 

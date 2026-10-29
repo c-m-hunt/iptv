@@ -1,6 +1,6 @@
 package com.cmhunt.iptvlive.ui.channels
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,14 +34,15 @@ import androidx.compose.ui.unit.dp
 import com.cmhunt.iptvlive.data.db.ChannelEntity
 
 /** One line of a channel list. [detail] is the grey second line, if any. */
-data class ChannelRow(val channel: ChannelEntity, val detail: String)
+data class ChannelRow(val channel: ChannelEntity, val detail: String, val favourite: Boolean = false)
 
+/** Long-press opens the channel's actions: favourite, save to a preset. */
 @Composable
-fun ChannelItem(row: ChannelRow, onClick: () -> Unit) {
+fun ChannelItem(row: ChannelRow, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -57,8 +60,14 @@ fun ChannelItem(row: ChannelRow, onClick: () -> Unit) {
                 )
             }
         }
+        if (row.favourite) {
+            Icon(Icons.Filled.Star, "Favourite", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        }
     }
 }
+
+/** "BBC One | FHD |" -> "BBC One": the quality tags crowd small labels. */
+fun shortName(name: String): String = name.substringBefore(" |").trim().ifEmpty { name }
 
 /** The search box at the top of every list, with a clear button. */
 @Composable

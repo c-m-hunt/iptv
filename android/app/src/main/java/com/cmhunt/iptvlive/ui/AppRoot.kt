@@ -49,7 +49,7 @@ fun AppRoot(container: AppContainer) {
 @Composable
 private fun MainGraph(container: AppContainer) {
     val nav = rememberNavController()
-    val play: (Int) -> Unit = { id -> nav.navigate("player/$id") }
+    val play: (Int, String) -> Unit = { id, ctx -> nav.navigate("player/$id?ctx=${Uri.encode(ctx)}") }
     NavHost(nav, startDestination = "main") {
         composable("main") {
             MainScreen(container, onPlay = play, onOpenCategory = { id -> nav.navigate("category/${Uri.encode(id)}") })
@@ -63,12 +63,16 @@ private fun MainGraph(container: AppContainer) {
             )
         }
         composable(
-            "player/{id}",
-            arguments = listOf(navArgument("id") { type = NavType.IntType }),
+            "player/{id}?ctx={ctx}",
+            arguments = listOf(
+                navArgument("id") { type = NavType.IntType },
+                navArgument("ctx") { type = NavType.StringType; defaultValue = "" },
+            ),
         ) { entry ->
             PlayerScreen(
                 container = container,
                 channelId = entry.arguments?.getInt("id") ?: 0,
+                context = entry.arguments?.getString("ctx").orEmpty(),
                 onBack = { nav.popBackStack() },
             )
         }

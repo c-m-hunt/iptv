@@ -34,6 +34,10 @@ class CatalogueRepository(
 
     suspend fun channel(id: Int): ChannelEntity? = dao.channel(id)
 
+    /** In catalogue order; ids no longer in the catalogue are dropped. */
+    suspend fun channels(ids: Collection<Int>): List<ChannelEntity> =
+        if (ids.isEmpty()) emptyList() else dao.channelsByIds(ids.distinct())
+
     suspend fun isEmpty(): Boolean = dao.channelCount() == 0
 
     suspend fun isStale(): Boolean {

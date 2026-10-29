@@ -5,18 +5,30 @@ It talks to the provider directly, so the Node server in `../webui` is not
 needed. Built for phones first, and kept usable with a D-pad so a TV box can
 run the same APK later.
 
-Status: **phase 2** — log in; Home with recent channels, Categories, and
-Search tabs; play a channel on the phone or **on a TV** over DLNA. Presets,
-favourites, channel up/down, EPG and the account panel follow.
+Status: **phase 3** — log in; Home with presets, favourites and recent
+channels; Categories and Search tabs; channel up/down; play on the phone or
+**on a TV** over DLNA. EPG and the account panel follow.
 
 ## Screens
 
-- **Home** — the last 20 channels watched, newest first. A channel counts once
-  it has *played* for 10 s (on the phone or the TV), so surfing doesn't fill it.
+- **Home** — nine preset tiles, favourites, and the last 20 channels watched.
+  A channel counts as watched once it has *played* for 10 s (on the phone or
+  the TV), so surfing doesn't fill the list.
 - **Categories** — the provider's categories with channel counts, filtered by
   all the words typed; open one for its channels, with its own filter.
 - **Search** — every channel, filtered the same way. The portal's own search
   ignores the query, so this is local.
+
+Long-press any channel for its actions: add to or remove from favourites, save
+to a preset slot (the grid shows what each slot holds), remove from Recent.
+
+**In the player**: swipe up for the next channel and down for the previous
+one, or use the arrows; up/down also step on the TV panel. They move through
+the list the channel was opened from — its category, Favourites, Recent,
+Presets or the search results — fixed when the player opens, so Recent doesn't
+reorder under you. The star and bookmark save the current channel; the strip
+at the bottom jumps to a preset. Keys work too: up/down, CH+/CH−, and 1–9 for
+the presets.
 
 The top bar (TV, refresh, log out) and the "playing on TV" banner are shared by
 all tabs. The tab bar is a bottom bar on a phone and a side rail on a wider
@@ -28,7 +40,7 @@ screen, which is also what a TV box will get.
 |---|---|
 | UI | Kotlin, Jetpack Compose, Material 3 (always dark) |
 | Playback | Media3 ExoPlayer, streams fetched through OkHttp |
-| Storage | Room: `iptv.db` (catalogue cache, rebuilt freely), `user.db` (recents; migrated, schema in `app/schemas`); DataStore for settings |
+| Storage | Room: `iptv.db` (catalogue cache, rebuilt freely), `user.db` (recents, favourites, presets; migrated, schemas in `app/schemas`); DataStore for settings |
 | Secrets | Password encrypted with an Android Keystore AES-GCM key |
 | Images | Coil 3, sharing the OkHttp client |
 | Play on TV | DLNA/UPnP: SSDP discovery, AVTransport SOAP, an optional relay |
@@ -129,8 +141,11 @@ app/src/main/java/com/cmhunt/iptvlive/
     xtream/XtreamUrls.kt        Portal URL clean-up, stream host, stream URLs
     xtream/XtreamClient.kt      player_api.php: login, categories, streams
     db/Catalogue.kt             Catalogue cache: entities, DAO, database
-    user/UserDatabase.kt        What the user made: recents (favourites, presets next)
+    user/UserDatabase.kt        What the user made: recents, favourites, presets
     RecentsRepository.kt        Recents, trimmed to 20
+    FavouritesRepository.kt     Favourites, in catalogue order
+    PresetsRepository.kt        Nine preset slots
+    ChannelQueue.kt             Play context and the up/down list
     CatalogueRepository.kt      Cached catalogue, refreshed after 6 hours
     CredentialStore.kt          Saved login (password encrypted)
     SecretBox.kt                Keystore AES-GCM
@@ -147,7 +162,8 @@ app/src/main/java/com/cmhunt/iptvlive/
     login/                      Login form
     main/                       Tabs, shared top bar, catalogue refresh
     home/, categories/, search/ The tabs, and a category's channel list
-    channels/                   Shared channel rows, search box, logos
+    channels/                   Shared channel rows, search box, logos, long-press sheet
+    presets/                    Preset tiles, slot grid, player strip
     player/                     Full-screen player, StreamPlayer (ExoPlayer)
     tv/                         TV picker, TV panel, "playing on TV" banner
 ```
@@ -162,6 +178,13 @@ app/src/main/java/com/cmhunt/iptvlive/
 - **ExoPlayer retries failed loads itself.** On top of the app's own retries,
   one HTTP 403 turned into 16 requests. 4xx answers now skip the internal
   retries, and a 404 is not retried at all.
+- **One connection at a time on a channel change.** `stop()` only asks the
+  loader thread to close the stream, so the next one opened while the last
+  was still connected. The player counts open connections in a wrapper data
+  source and waits for zero before it prepares the next channel.
+- **Snapshot state for effects.** An effect keyed on a nullable player read
+  the player when its coroutine ran, so it played on the null key and again
+  on the real one: every stream opened twice.
 - **Release the player on stop.** Each stream is one of the account's few
   connections; the player screen frees it when the app leaves the foreground
   and reconnects on return.

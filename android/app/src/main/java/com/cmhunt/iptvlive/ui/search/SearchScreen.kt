@@ -7,7 +7,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -17,6 +19,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cmhunt.iptvlive.AppContainer
 import com.cmhunt.iptvlive.data.ChannelSearch
+import com.cmhunt.iptvlive.data.PlayContext
+import com.cmhunt.iptvlive.ui.channels.ChannelActions
+import com.cmhunt.iptvlive.ui.channels.ChannelActionsSheet
 import com.cmhunt.iptvlive.ui.channels.ChannelItem
 import com.cmhunt.iptvlive.ui.channels.ChannelRow
 import com.cmhunt.iptvlive.ui.channels.Message
@@ -38,9 +43,13 @@ data class SearchState(val rows: List<ChannelRow> = emptyList(), val total: Int 
 class SearchViewModel(container: AppContainer) : ViewModel() {
     val query = MutableStateFlow("")
 
-    private val index = combine(container.catalogue.channels, container.catalogue.categories) { chans, cats ->
+    private val index = combine(
+        container.catalogue.channels,
+        container.catalogue.categories,
+        container.favourites.ids,
+    ) { chans, cats, favs ->
         val names = cats.associate { it.id to it.name }
-        ChannelSearch(chans.map { ChannelRow(it, names[it.categoryId].orEmpty()) }) { it.channel.name }
+        ChannelSearch(chans.map { ChannelRow(it, names[it.categoryId].orEmpty(), it.id in favs) }) { it.channel.name }
     }.flowOn(Dispatchers.Default)
 
     val state: StateFlow<SearchState> =
@@ -51,11 +60,12 @@ class SearchViewModel(container: AppContainer) : ViewModel() {
 
 /** Every channel, filtered by all the words typed: the portal's own search doesn't work. */
 @Composable
-fun SearchScreen(container: AppContainer, onPlay: (Int) -> Unit) {
+fun SearchScreen(container: AppContainer, onPlay: (Int, String) -> Unit) {
     val vm = viewModel { SearchViewModel(container) }
     val state by vm.state.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val focus = remember { FocusRequester() }
+    var actions by remember { mutableStateOf<ChannelActions?>(null) }
 
     // Opening the Search tab means typing; returning to a search means reading it.
     LaunchedEffect(Unit) { if (vm.query.value.isEmpty()) focus.requestFocus() }
@@ -72,9 +82,16 @@ fun SearchScreen(container: AppContainer, onPlay: (Int) -> Unit) {
         } else {
             LazyColumn(Modifier.fillMaxSize()) {
                 items(state.rows, key = { it.channel.id }) { row ->
-                    ChannelItem(row, onClick = { onPlay(row.channel.id) })
+                    ChannelItem(
+                        row,
+                        // Up/down then steps through these results.
+                        onClick = { onPlay(row.channel.id, PlayContext.search(query)) },
+                        onLongClick = { actions = ChannelActions(row.channel) },
+                    )
                 }
             }
         }
     }
+
+    actions?.let { ChannelActionsSheet(container, it, onDismiss = { actions = null }) }
 }

@@ -15,6 +15,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.ViewModel
@@ -23,6 +26,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cmhunt.iptvlive.AppContainer
 import com.cmhunt.iptvlive.data.ChannelSearch
+import com.cmhunt.iptvlive.data.PlayContext
+import com.cmhunt.iptvlive.ui.channels.ChannelActions
+import com.cmhunt.iptvlive.ui.channels.ChannelActionsSheet
 import com.cmhunt.iptvlive.ui.channels.ChannelItem
 import com.cmhunt.iptvlive.ui.channels.ChannelRow
 import com.cmhunt.iptvlive.ui.channels.Message
@@ -39,7 +45,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 data class CategoryState(val name: String = "", val rows: List<ChannelRow> = emptyList(), val total: Int = 0)
@@ -51,8 +56,9 @@ class CategoryChannelsViewModel(container: AppContainer, categoryId: String) : V
     private val name = flow { emit(container.catalogue.category(categoryId)?.name.orEmpty()) }
 
     // Every row is in the same category, so the second line stays empty.
-    private val index = container.catalogue.channelsIn(categoryId)
-        .map { list -> ChannelSearch(list.map { ChannelRow(it, "") }) { it.channel.name } }
+    private val index = combine(container.catalogue.channelsIn(categoryId), container.favourites.ids) { list, favs ->
+        ChannelSearch(list.map { ChannelRow(it, "", it.id in favs) }) { it.channel.name }
+    }
 
     val state: StateFlow<CategoryState> =
         combine(name, index, query.debounce(100)) { n, idx, q -> CategoryState(n, idx.search(q), idx.search("").size) }
@@ -62,11 +68,12 @@ class CategoryChannelsViewModel(container: AppContainer, categoryId: String) : V
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CategoryChannelsScreen(container: AppContainer, categoryId: String, onBack: () -> Unit, onPlay: (Int) -> Unit) {
+fun CategoryChannelsScreen(container: AppContainer, categoryId: String, onBack: () -> Unit, onPlay: (Int, String) -> Unit) {
     val vm = viewModel(key = "category-$categoryId") { CategoryChannelsViewModel(container, categoryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val tvState by container.tv.state.collectAsStateWithLifecycle()
+    var actions by remember { mutableStateOf<ChannelActions?>(null) }
 
     Scaffold(
         topBar = {
@@ -79,7 +86,7 @@ fun CategoryChannelsScreen(container: AppContainer, categoryId: String, onBack: 
             )
         },
         bottomBar = {
-            TvBanner(tvState, onOpen = { tvState.channelId?.let(onPlay) }, onStop = container.tv::stop)
+            TvBanner(tvState, onOpen = { tvState.channelId?.let { onPlay(it, "") } }, onStop = container.tv::stop)
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
@@ -89,10 +96,16 @@ fun CategoryChannelsScreen(container: AppContainer, categoryId: String, onBack: 
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(state.rows, key = { it.channel.id }) { row ->
-                        ChannelItem(row, onClick = { onPlay(row.channel.id) })
+                        ChannelItem(
+                            row,
+                            onClick = { onPlay(row.channel.id, PlayContext.category(categoryId)) },
+                            onLongClick = { actions = ChannelActions(row.channel) },
+                        )
                     }
                 }
             }
         }
     }
+
+    actions?.let { ChannelActionsSheet(container, it, onDismiss = { actions = null }) }
 }

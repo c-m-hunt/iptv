@@ -63,7 +63,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(container: AppContainer, onPlay: (Int) -> Unit, onOpenCategory: (String) -> Unit) {
+fun MainScreen(container: AppContainer, onPlay: (Int, String) -> Unit, onOpenCategory: (String) -> Unit) {
     val vm = viewModel { MainViewModel(container) }
     val refresh by vm.refresh.collectAsStateWithLifecycle()
     val count by vm.channelCount.collectAsStateWithLifecycle()
@@ -120,7 +120,7 @@ fun MainScreen(container: AppContainer, onPlay: (Int) -> Unit, onOpenCategory: (
             bottomBar = {
                 TvBanner(
                     tvState,
-                    onOpen = { tvState.channelId?.let(onPlay) },
+                    onOpen = { tvState.channelId?.let { onPlay(it, "") } },
                     onStop = container.tv::stop,
                     // The navigation bar below already keeps clear of the gesture bar.
                     padForSystemBar = !bottomBar,

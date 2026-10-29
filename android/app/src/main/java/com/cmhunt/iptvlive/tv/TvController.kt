@@ -72,7 +72,13 @@ class TvController(
         .build()
     private val avt = AvTransport(soapHttp)
     private val relay = StreamRelay(http)
-    private val noRedirects = soapHttp.newBuilder().followRedirects(false).followSslRedirects(false).build()
+    // Short timeouts: this only reads a Location header, and the TV waits on it.
+    private val noRedirects = soapHttp.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(3, TimeUnit.SECONDS)
+        .build()
 
     private val _state = MutableStateFlow(TvState())
     val state: StateFlow<TvState> = _state

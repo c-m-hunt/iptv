@@ -1,6 +1,13 @@
 package com.cmhunt.iptvlive.ui.tv
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.FilledTonalIconButton
+import com.cmhunt.iptvlive.ui.player.NowPlaying
+import com.cmhunt.iptvlive.ui.presets.PresetStrip
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,9 +58,16 @@ fun TvStatus.label(): String = when (this) {
 
 /** The player screen while a TV is selected: remote-control style, no video. */
 @Composable
-fun TvPanel(container: AppContainer, channelId: Int, onBack: () -> Unit) {
+fun TvPanel(
+    container: AppContainer,
+    now: NowPlaying?,
+    onBack: () -> Unit,
+    onStep: (Int) -> Unit,
+    onPreset: (Int) -> Unit,
+) {
     val tv = container.tv
     val state by tv.state.collectAsStateWithLifecycle()
+    val slots by container.presets.slots.collectAsStateWithLifecycle(emptyList())
     val device = state.device ?: return
 
     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -61,7 +75,7 @@ fun TvPanel(container: AppContainer, channelId: Int, onBack: () -> Unit) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
         }
         Column(
-            Modifier.fillMaxSize().padding(32.dp),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -70,10 +84,17 @@ fun TvPanel(container: AppContainer, channelId: Int, onBack: () -> Unit) {
             Text("Playing on ${device.name}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             Text(
-                state.channelName.ifEmpty { "…" },
+                state.channelName.ifEmpty { now?.name ?: "…" },
                 style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center,
             )
+            if (now != null) {
+                Text(
+                    listOf(now.listLabel, "${now.position} / ${now.size}").filter { it.isNotBlank() }.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (state.status is TvStatus.Starting) {
@@ -88,14 +109,22 @@ fun TvPanel(container: AppContainer, channelId: Int, onBack: () -> Unit) {
                 )
             }
             Spacer(Modifier.height(24.dp))
-            when (state.status) {
-                is TvStatus.Playing, is TvStatus.Starting -> OutlinedButton(onClick = tv::stop) {
-                    Icon(Icons.Filled.Stop, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Stop")
+            // Channel down, stop/play, channel up: a remote's middle row.
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                FilledTonalIconButton(onClick = { onStep(-1) }) { Icon(Icons.Filled.KeyboardArrowDown, "Previous channel") }
+                when (state.status) {
+                    is TvStatus.Playing, is TvStatus.Starting -> OutlinedButton(onClick = tv::stop) {
+                        Icon(Icons.Filled.Stop, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Stop")
+                    }
+                    else -> Button(onClick = { now?.let { tv.play(it.id) } }) { Text("Play on TV") }
                 }
-                else -> Button(onClick = { tv.play(channelId) }) { Text("Play on TV") }
+                FilledTonalIconButton(onClick = { onStep(+1) }) { Icon(Icons.Filled.KeyboardArrowUp, "Next channel") }
             }
+            Spacer(Modifier.height(20.dp))
+            PresetStrip(slots, now?.id, onChoose = onPreset)
+            Spacer(Modifier.height(8.dp))
             TextButton(onClick = tv::disconnect) { Text("Watch on this phone instead") }
         }
     }

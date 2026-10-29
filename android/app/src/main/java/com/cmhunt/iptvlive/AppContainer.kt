@@ -6,12 +6,17 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room.Room
 import com.cmhunt.iptvlive.data.CatalogueRepository
 import com.cmhunt.iptvlive.data.CredentialStore
+import com.cmhunt.iptvlive.data.FavouritesRepository
+import com.cmhunt.iptvlive.data.PresetsRepository
 import com.cmhunt.iptvlive.data.RecentsRepository
 import com.cmhunt.iptvlive.data.SecretBox
 import com.cmhunt.iptvlive.data.db.AppDatabase
 import com.cmhunt.iptvlive.data.user.UserDatabase
 import com.cmhunt.iptvlive.data.xtream.XtreamClient
 import com.cmhunt.iptvlive.tv.TvController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -20,6 +25,12 @@ import java.util.concurrent.TimeUnit
  * would cost more build time than it saves.
  */
 class AppContainer(context: Context) {
+
+    /**
+     * For writes the user asked for from a sheet or dialog that closes at once:
+     * a composable's own scope would cancel them as it leaves the screen.
+     */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /** Shared by the API, the player and the logo loader. */
     val http: OkHttpClient = OkHttpClient.Builder()
@@ -48,6 +59,8 @@ class AppContainer(context: Context) {
     val credentials = CredentialStore(prefs, SecretBox())
     val catalogue = CatalogueRepository(db.catalogue(), xtream, prefs)
     val recents = RecentsRepository(userDb.recents())
+    val favourites = FavouritesRepository(userDb.favourites(), catalogue)
+    val presets = PresetsRepository(userDb.presets(), catalogue)
     val tv = TvController(context, http, credentials, catalogue, recents)
 
     companion object {
