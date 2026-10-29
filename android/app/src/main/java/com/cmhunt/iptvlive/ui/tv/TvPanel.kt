@@ -103,7 +103,7 @@ fun TvPanel(container: AppContainer, channelId: Int, onBack: () -> Unit) {
 
 /** A strip for the channel list: what the TV is playing, with a stop button. */
 @Composable
-fun TvBanner(state: TvState, onOpen: () -> Unit, onStop: () -> Unit) {
+fun TvBanner(state: TvState, onOpen: () -> Unit, onStop: () -> Unit, padForSystemBar: Boolean = true) {
     val device = state.device ?: return
     if (state.channelId == null) return
     Surface(color = MaterialTheme.colorScheme.primaryContainer) {
@@ -113,7 +113,7 @@ fun TvBanner(state: TvState, onOpen: () -> Unit, onStop: () -> Unit) {
                 .clickable(onClick = onOpen)
                 .background(MaterialTheme.colorScheme.primaryContainer)
                 // The colour runs under the gesture bar; the text stays above it.
-                .navigationBarsPadding()
+                .then(if (padForSystemBar) Modifier.navigationBarsPadding() else Modifier)
                 .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

@@ -1,5 +1,6 @@
 package com.cmhunt.iptvlive.ui
 
+import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -13,8 +14,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.cmhunt.iptvlive.AppContainer
 import com.cmhunt.iptvlive.data.Credentials
-import com.cmhunt.iptvlive.ui.channels.ChannelsScreen
+import com.cmhunt.iptvlive.ui.categories.CategoryChannelsScreen
 import com.cmhunt.iptvlive.ui.login.LoginScreen
+import com.cmhunt.iptvlive.ui.main.MainScreen
 import com.cmhunt.iptvlive.ui.player.PlayerScreen
 import kotlinx.coroutines.flow.map
 
@@ -47,9 +49,18 @@ fun AppRoot(container: AppContainer) {
 @Composable
 private fun MainGraph(container: AppContainer) {
     val nav = rememberNavController()
-    NavHost(nav, startDestination = "channels") {
-        composable("channels") {
-            ChannelsScreen(container, onPlay = { id -> nav.navigate("player/$id") })
+    val play: (Int) -> Unit = { id -> nav.navigate("player/$id") }
+    NavHost(nav, startDestination = "main") {
+        composable("main") {
+            MainScreen(container, onPlay = play, onOpenCategory = { id -> nav.navigate("category/${Uri.encode(id)}") })
+        }
+        composable("category/{id}") { entry ->
+            CategoryChannelsScreen(
+                container = container,
+                categoryId = entry.arguments?.getString("id").orEmpty(),
+                onBack = { nav.popBackStack() },
+                onPlay = play,
+            )
         }
         composable(
             "player/{id}",

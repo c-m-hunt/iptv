@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 sealed interface PlayerTarget {
     data object Loading : PlayerTarget
     data class Missing(val message: String) : PlayerTarget
-    data class Ready(val name: String, val url: String) : PlayerTarget
+    data class Ready(val id: Int, val name: String, val url: String) : PlayerTarget
 }
 
 class PlayerViewModel(container: AppContainer, channelId: Int) : ViewModel() {
@@ -28,6 +28,7 @@ class PlayerViewModel(container: AppContainer, channelId: Int) : ViewModel() {
                 channel == null -> PlayerTarget.Missing("This channel is no longer in the list.")
                 creds == null -> PlayerTarget.Missing("You are logged out.")
                 else -> PlayerTarget.Ready(
+                    channel.id,
                     channel.name,
                     XtreamUrls.liveStream(creds.streamBase, creds.username, creds.password, channel.id),
                 )

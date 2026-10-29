@@ -39,6 +39,11 @@ android {
     }
 }
 
+ksp {
+    // Schemas of the user database are kept in git so migrations can be checked.
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 kotlin {
     // Bytecode target only: builds with whatever JDK runs Gradle (17+).
     compilerOptions {
@@ -58,6 +63,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material3.navigation.suite)
     implementation(libs.compose.material.icons)
     debugImplementation(libs.compose.ui.tooling)
 

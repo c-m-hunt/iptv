@@ -30,6 +30,13 @@ data class CategoryEntity(
     val position: Int,
 )
 
+data class CategoryWithCount(
+    val id: String,
+    val name: String,
+    val position: Int,
+    val count: Int,
+)
+
 @Dao
 interface CatalogueDao {
     @Query("SELECT * FROM channels ORDER BY position")
@@ -41,8 +48,24 @@ interface CatalogueDao {
     @Query("SELECT * FROM categories ORDER BY position")
     fun categories(): Flow<List<CategoryEntity>>
 
+    // Empty categories are left out: there is nothing to open.
+    @Query(
+        "SELECT c.id, c.name, c.position, COUNT(ch.id) AS count FROM categories c " +
+            "JOIN channels ch ON ch.categoryId = c.id GROUP BY c.id ORDER BY c.position"
+    )
+    fun categoriesWithCounts(): Flow<List<CategoryWithCount>>
+
+    @Query("SELECT * FROM categories WHERE id = :id")
+    suspend fun category(id: String): CategoryEntity?
+
+    @Query("SELECT * FROM channels WHERE categoryId = :categoryId ORDER BY position")
+    fun channelsIn(categoryId: String): Flow<List<ChannelEntity>>
+
     @Query("SELECT COUNT(*) FROM channels")
     suspend fun channelCount(): Int
+
+    @Query("SELECT COUNT(*) FROM channels")
+    fun channelCountFlow(): Flow<Int>
 
     // REPLACE because some portals list the same stream_id twice.
     @Insert(onConflict = OnConflictStrategy.REPLACE)

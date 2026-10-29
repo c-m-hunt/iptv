@@ -11,6 +11,9 @@ private val colors = darkColorScheme(
     onPrimary = Color(0xFF00222E),
     primaryContainer = Color(0xFF0B3A4C),
     onPrimaryContainer = Color(0xFFBFE9FB),
+    // The selected tab's pill; left unset it is Material's default lilac.
+    secondaryContainer = Color(0xFF0B3A4C),
+    onSecondaryContainer = Color(0xFFBFE9FB),
     background = Color(0xFF0F1115),
     onBackground = Color(0xFFE3E5EA),
     surface = Color(0xFF0F1115),

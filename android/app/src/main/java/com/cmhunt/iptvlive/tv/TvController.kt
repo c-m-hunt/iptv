@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import com.cmhunt.iptvlive.data.CatalogueRepository
 import com.cmhunt.iptvlive.data.CredentialStore
+import com.cmhunt.iptvlive.data.RecentsRepository
 import com.cmhunt.iptvlive.data.dlna.AvTransport
 import com.cmhunt.iptvlive.data.dlna.DlnaDevice
 import com.cmhunt.iptvlive.data.dlna.DlnaException
@@ -59,6 +60,7 @@ class TvController(
     http: OkHttpClient,
     private val credentials: CredentialStore,
     private val catalogue: CatalogueRepository,
+    private val recents: RecentsRepository,
 ) {
     private val app = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -155,7 +157,7 @@ class TvController(
         if (device.udn !in needsRelay) {
             endRelay()
             when (val r = tryStart(device, resolveRedirects(source), channel.name)) {
-                null -> return playing(device, TvMode.Direct)
+                null -> return playing(device, channel.id, TvMode.Direct)
                 else -> lastError = r
             }
             needsRelay += device.udn
@@ -170,7 +172,7 @@ class TvController(
         }
         RelayService.start(app, "${channel.name} on ${device.name}")
         when (val r = tryStart(device, relayed, channel.name)) {
-            null -> playing(device, TvMode.Relay)
+            null -> playing(device, channel.id, TvMode.Relay)
             else -> {
                 endRelay()
                 fail(r.takeIf { it != NOT_STARTED } ?: lastError?.takeIf { it != NOT_STARTED }
@@ -207,12 +209,15 @@ class TvController(
         }
     }
 
-    private suspend fun playing(device: DlnaDevice, mode: TvMode) {
+    private suspend fun playing(device: DlnaDevice, channelId: Int, mode: TvMode) {
         _state.update { it.copy(status = TvStatus.Playing(mode)) }
         // Notice when the TV stops on its own: its remote, input change, stream end.
         var errors = 0
+        var playedMs = 0L
         while (true) {
-            delay(5_000)
+            delay(POLL_MS)
+            playedMs += POLL_MS
+            if (playedMs == RecentsRepository.WATCHED_AFTER_MS) recents.markWatched(channelId)
             val s = try {
                 avt.transportState(device).also { errors = 0 }
             } catch (e: DlnaException) {
@@ -269,6 +274,7 @@ class TvController(
         const val START_POLLS = 15
         const val STOPPED_POLLS = 4
         const val MAX_REDIRECTS = 5
+        const val POLL_MS = 5_000L
         const val NOT_STARTED = "not started"
     }
 }

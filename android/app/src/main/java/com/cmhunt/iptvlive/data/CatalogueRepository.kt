@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import com.cmhunt.iptvlive.data.db.CatalogueDao
 import com.cmhunt.iptvlive.data.db.CategoryEntity
+import com.cmhunt.iptvlive.data.db.CategoryWithCount
 import com.cmhunt.iptvlive.data.db.ChannelEntity
 import com.cmhunt.iptvlive.data.xtream.XtreamClient
 import kotlinx.coroutines.async
@@ -24,6 +25,12 @@ class CatalogueRepository(
 ) {
     val channels: Flow<List<ChannelEntity>> = dao.channels()
     val categories: Flow<List<CategoryEntity>> = dao.categories()
+    val categoriesWithCounts: Flow<List<CategoryWithCount>> = dao.categoriesWithCounts()
+    val channelCount: Flow<Int> = dao.channelCountFlow()
+
+    fun channelsIn(categoryId: String): Flow<List<ChannelEntity>> = dao.channelsIn(categoryId)
+
+    suspend fun category(id: String): CategoryEntity? = dao.category(id)
 
     suspend fun channel(id: Int): ChannelEntity? = dao.channel(id)
 

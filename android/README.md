@@ -5,9 +5,22 @@ It talks to the provider directly, so the Node server in `../webui` is not
 needed. Built for phones first, and kept usable with a D-pad so a TV box can
 run the same APK later.
 
-Status: **phase 1** — log in, download and search the channel list, play a
-channel — plus **Play on TV** over DLNA. Categories, presets, recents,
-favourites, EPG and the account panel follow.
+Status: **phase 2** — log in; Home with recent channels, Categories, and
+Search tabs; play a channel on the phone or **on a TV** over DLNA. Presets,
+favourites, channel up/down, EPG and the account panel follow.
+
+## Screens
+
+- **Home** — the last 20 channels watched, newest first. A channel counts once
+  it has *played* for 10 s (on the phone or the TV), so surfing doesn't fill it.
+- **Categories** — the provider's categories with channel counts, filtered by
+  all the words typed; open one for its channels, with its own filter.
+- **Search** — every channel, filtered the same way. The portal's own search
+  ignores the query, so this is local.
+
+The top bar (TV, refresh, log out) and the "playing on TV" banner are shared by
+all tabs. The tab bar is a bottom bar on a phone and a side rail on a wider
+screen, which is also what a TV box will get.
 
 ## Stack
 
@@ -15,7 +28,7 @@ favourites, EPG and the account panel follow.
 |---|---|
 | UI | Kotlin, Jetpack Compose, Material 3 (always dark) |
 | Playback | Media3 ExoPlayer, streams fetched through OkHttp |
-| Storage | Room for the channel catalogue, DataStore for settings |
+| Storage | Room: `iptv.db` (catalogue cache, rebuilt freely), `user.db` (recents; migrated, schema in `app/schemas`); DataStore for settings |
 | Secrets | Password encrypted with an Android Keystore AES-GCM key |
 | Images | Coil 3, sharing the OkHttp client |
 | Play on TV | DLNA/UPnP: SSDP discovery, AVTransport SOAP, an optional relay |
@@ -115,7 +128,9 @@ app/src/main/java/com/cmhunt/iptvlive/
   data/
     xtream/XtreamUrls.kt        Portal URL clean-up, stream host, stream URLs
     xtream/XtreamClient.kt      player_api.php: login, categories, streams
-    db/Catalogue.kt             Room entities, DAO, database
+    db/Catalogue.kt             Catalogue cache: entities, DAO, database
+    user/UserDatabase.kt        What the user made: recents (favourites, presets next)
+    RecentsRepository.kt        Recents, trimmed to 20
     CatalogueRepository.kt      Cached catalogue, refreshed after 6 hours
     CredentialStore.kt          Saved login (password encrypted)
     SecretBox.kt                Keystore AES-GCM
@@ -130,7 +145,9 @@ app/src/main/java/com/cmhunt/iptvlive/
   ui/
     AppRoot.kt                  Login vs. main screens, navigation
     login/                      Login form
-    channels/                   Channel list and search
+    main/                       Tabs, shared top bar, catalogue refresh
+    home/, categories/, search/ The tabs, and a category's channel list
+    channels/                   Shared channel rows, search box, logos
     player/                     Full-screen player, StreamPlayer (ExoPlayer)
     tv/                         TV picker, TV panel, "playing on TV" banner
 ```

@@ -54,6 +54,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.cmhunt.iptvlive.AppContainer
+import com.cmhunt.iptvlive.data.RecentsRepository
 import com.cmhunt.iptvlive.ui.tv.TvIcon
 import com.cmhunt.iptvlive.ui.tv.TvPickerSheet
 import com.cmhunt.iptvlive.ui.tv.TvPanel
@@ -106,6 +107,17 @@ private fun LivePlayer(container: AppContainer, target: PlayerTarget.Ready, onBa
     }
 
     val ui = player?.ui?.collectAsState()?.value ?: PlaybackUi()
+
+    // Counts time actually playing, not buffering, before it goes in Recents.
+    LaunchedEffect(player) {
+        val p = player ?: return@LaunchedEffect
+        var playedMs = 0L
+        while (playedMs < RecentsRepository.WATCHED_AFTER_MS) {
+            delay(1_000)
+            if (p.exo.isPlaying) playedMs += 1_000
+        }
+        container.recents.markWatched(target.id)
+    }
     var showControls by remember { mutableStateOf(true) }
     var touches by remember { mutableIntStateOf(0) }
     var pickerOpen by remember { mutableStateOf(false) }

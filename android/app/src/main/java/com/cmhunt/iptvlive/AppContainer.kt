@@ -6,8 +6,10 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room.Room
 import com.cmhunt.iptvlive.data.CatalogueRepository
 import com.cmhunt.iptvlive.data.CredentialStore
+import com.cmhunt.iptvlive.data.RecentsRepository
 import com.cmhunt.iptvlive.data.SecretBox
 import com.cmhunt.iptvlive.data.db.AppDatabase
+import com.cmhunt.iptvlive.data.user.UserDatabase
 import com.cmhunt.iptvlive.data.xtream.XtreamClient
 import com.cmhunt.iptvlive.tv.TvController
 import okhttp3.OkHttpClient
@@ -40,10 +42,13 @@ class AppContainer(context: Context) {
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
 
+    private val userDb = Room.databaseBuilder(context, UserDatabase::class.java, "user.db").build()
+
     val xtream = XtreamClient(http)
     val credentials = CredentialStore(prefs, SecretBox())
     val catalogue = CatalogueRepository(db.catalogue(), xtream, prefs)
-    val tv = TvController(context, http, credentials, catalogue)
+    val recents = RecentsRepository(userDb.recents())
+    val tv = TvController(context, http, credentials, catalogue, recents)
 
     companion object {
         const val USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20"
